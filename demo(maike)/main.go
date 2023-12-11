@@ -7,9 +7,8 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-
+	"sigs.k8s.io/yaml"
 	"github.com/argoproj/pkg/errors"
-	argoJson "github.com/argoproj/pkg/json"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/tools/clientcmd"
@@ -26,12 +25,13 @@ func main() {
 	usr, err := user.Current()
 	checkErr(err)
 
-	yamlContent, err := os.ReadFile("hello-world.json")
+	yamlContent, err := os.ReadFile("hello-world.yaml")
     checkErr(err)
 
 	// parse the workflow json to wf instance
 	var wf wfv1.Workflow
-	err = argoJson.Unmarshal(yamlContent, &wf)
+	err = yaml.UnmarshalStrict(yamlContent, &wf)
+
 	checkErr(err)
 
 	// get kubeconfig file location
