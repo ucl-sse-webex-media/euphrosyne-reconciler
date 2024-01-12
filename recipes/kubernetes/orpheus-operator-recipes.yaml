@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orpheus-operator-recipes
+data:
+  dummy: |
+    image: "phoevos/euphrosyne-recipes:latest"
+    entrypoint: "dummy"
+    params:
+      - name: "data"
+        value: "dummy"
