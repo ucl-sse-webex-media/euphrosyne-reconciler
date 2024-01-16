@@ -4,8 +4,14 @@ metadata:
   name: orpheus-operator-recipes
 data:
   dummy: |
-    image: "phoevos/euphrosyne-recipes:latest"
+    image: "maikeee32e/euphrosyne-recipes:latest"
     entrypoint: "dummy"
     params:
       - name: "data"
         value: "dummy"
+  demo: |
+    image: "maikeee32e/euphrosyne-recipes:latest"
+    entrypoint: "demo"
+    params:
+      - name: "data"
+        value: "demo"
