@@ -1,4 +1,6 @@
 import argparse
+import json
+import redis
 import requests
 
 
@@ -26,13 +28,16 @@ def main():
 
     if args.data:
         print("Received input:", args.data)
-        response = requests.post(
-            WEBEX_BOT_ENDPOINT, headers=get_headers(), data=get_data(args.data)
-        )
-        if response.status_code == 200:
-            print("Data forwarded successfully to Webex Bot")
-        else:
-            print("Failed to forward data to Webex Bot:", response.text)
+        alert = json.loads(args.data)
+        redisClient = redis.Redis(host='redis-service', port=6379)
+        redisClient.publish(alert["alertId"],"message 2")
+        # response = requests.post(
+        #     WEBEX_BOT_ENDPOINT, headers=get_headers(), data=get_data(args.data)
+        # )
+        # if response.status_code == 200:
+        #     print("Data forwarded successfully to Webex Bot")
+        # else:
+        #     print("Failed to forward data to Webex Bot:", response.text)
     else:
         print("No input provided")
 

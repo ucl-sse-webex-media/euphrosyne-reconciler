@@ -4,7 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
+	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -44,6 +44,12 @@ func createLogger() *zap.Logger {
 }
 
 func main() {
+	rdb := redis.NewClient(&redis.Options{
+        Addr: "localhost:6379", 
+        Password: "", 
+        DB:       0, 
+    })
+
 	initLogger()
 
 	// Create a channel for graceful shutdown signal
@@ -56,7 +62,7 @@ func main() {
 		return
 	}
 
-	go StartAlertHandler(clientset, logger)
+	go StartAlertHandler(clientset, logger,rdb)
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
