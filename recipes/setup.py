@@ -7,11 +7,11 @@ setup(
     install_requires=[
         "requests",
         "redis",
+        "tenacity",
     ],
     entry_points={
         "console_scripts": [
             "dummy = scripts.dummy:main",
-            "demo = scripts.demo:main",
         ],
     },
 )

@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis-deployment
+  name: euphrosyne-reconciler-redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: euphrosyne-reconciler-redis
   template:
     metadata:
       labels:
-        app: redis
+        app: euphrosyne-reconciler-redis
     spec:
       containers:
       - name: redis
