@@ -1,22 +1,49 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+
 	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"k8s.io/client-go/kubernetes"
 )
 
-var logger *zap.Logger
+var (
+	clientset *kubernetes.Clientset
+	rdb       *redis.Client
+	logger    *zap.Logger
 
-func initLogger() {
-	logger = createLogger()
-	defer logger.Sync()
+	webexBotAddress string
+	recipeTimeout   int
+)
+
+func init() {
+	flag.StringVar(
+		&webexBotAddress,
+		"webex-bot-address",
+		os.Getenv("WEBEX_BOT_ADDRESS"),
+		"HTTP address for the Webex Bot",
+	)
+
+	timeout, _ := strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
+	if timeout == 0 {
+		timeout = 300
+	}
+	flag.IntVar(
+		&recipeTimeout,
+		"recipe-timeout",
+		timeout,
+		"Timeout in seconds for recipe execution",
+	)
+	flag.Parse()
 }
 
-func createLogger() *zap.Logger {
+func initLogger() {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -40,15 +67,16 @@ func createLogger() *zap.Logger {
 		},
 	}
 
-	return zap.Must(config.Build())
+	logger = zap.Must(config.Build())
+	logger.Sync()
 }
 
 func main() {
-	rdb := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379", 
-        Password: "", 
-        DB:       0, 
-    })
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
+		Password: "",
+		DB:       0,
+	})
 
 	initLogger()
 
@@ -56,13 +84,14 @@ func main() {
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
-	clientset, err := InitialiseKubernetesClient()
+	var err error
+	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
 	}
 
-	go StartAlertHandler(clientset, logger,rdb)
+	go StartAlertHandler()
 
 	<-shutdownChan
 	logger.Info("Shutting down...")

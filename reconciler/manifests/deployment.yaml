@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: euphrosyne-reconciler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: euphrosyne-reconciler
+  template:
+    metadata:
+      labels:
+        app: euphrosyne-reconciler
+    spec:
+      containers:
+        - name: euphrosyne-reconciler
+          image: phoevos/euphrosyne-reconciler:latest
+          command:
+            - /reconciler
+          args:
+            - --webex-bot-address
+            - https://254c-31-205-79-63.ngrok-free.app
+            - --recipe-timeout
+            - "300"
+          ports:
+            - containerPort: 8080
+      serviceAccountName: euphrosyne-reconciler
