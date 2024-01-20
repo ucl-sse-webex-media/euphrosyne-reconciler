@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 
 var (
 	clientset *kubernetes.Clientset
+	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
 
@@ -71,7 +74,16 @@ func initLogger() {
 	logger.Sync()
 }
 
+func getHTTPClient() *http.Client {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	return &http.Client{Transport: tr}
+}
+
 func main() {
+	httpc = getHTTPClient()
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
 		Password: "",
