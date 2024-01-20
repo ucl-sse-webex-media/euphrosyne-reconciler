@@ -2,10 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: euphrosyne-reconciler-redis
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler-redis
 spec:
   type: ClusterIP
   ports:
   - port: 80
     targetPort: 6379
   selector:
-    app: euphrosyne-reconciler-redis
+    app: orpheus-operator
+    component: euphrosyne-reconciler-redis
