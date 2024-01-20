@@ -24,21 +24,70 @@ The Reconciler responds to alerts raised by an external system. Using Grafana fo
 pretty straightforward. The easiest way to get started with Grafana is using the
 [kube-prometheus](https://github.com/prometheus-operator/kube-prometheus) project. Installing this
 configures Grafana along with some other services (e.g. Prometheus) and some Dashboards and Alerts
-already in place. Following the instructions from the linked repository:
+already in place. In order for the installation to work seamlessly with our system, we need to
+make some slight modifications to the manifests before applying them. More specifically we need to
+expose Grafana so that the Aggregator can communicate with it. By default, Grafana is only
+accessible by Prometheus:
 
-```bash
-kubectl apply --server-side -f manifests/setup
-kubectl wait \
-	--for condition=Established \
-	--all CustomResourceDefinition \
-	--namespace=monitoring
-kubectl apply -f manifests/
-```
+1. Clone the `kube-prometheus` project locally:
+
+    ```bash
+    git clone git@github.com:prometheus-operator/kube-prometheus.git
+    cd kube-prometheus
+    ```
+
+2. Edit the Grafana service port, so that we don't need to specify it when executing HTTP requests
+   using the Service FQDN (i.e. http://grafana.monitoring.svc.cluster.local). More specifically,
+   edit [`manifests/grafana-service.yaml`](https://github.com/prometheus-operator/kube-prometheus/blob/main/manifests/grafana-service.yaml) to set the `port` to 80:
+
+    ```yaml
+    # replace the following
+      ports:
+      - name: http
+          port: 3000
+        targetPort: http
+    # with
+      ports:
+      - name: http
+          port: 80
+        targetPort: http
+    ```
+
+3. Edit the Grafana network policy so that ingress traffic from any application is allowed. By
+   default, only traffic coming from Prometheus is permitted. More specifically, edit
+   [`manifests/grafana-networkPolicy`](https://github.com/prometheus-operator/kube-prometheus/blob/main/manifests/grafana-networkPolicy.yaml) to allow *all* ingress traffic (in a production setting we would
+   keep this more fine-grained):
+
+    ```yaml
+    # replace the following
+      ingress:
+      - from:
+        - podSelector:
+            matchLabels:
+            app.kubernetes.io/name: prometheus
+        ports:
+        - port: 3000
+        protocol: TCP
+    # with
+      ingress:
+      - {}
+    ```
+
+4. Finally, apply the manifests, as shown in the upstream guide:
+
+    ```bash
+    kubectl apply --server-side -f manifests/setup
+    kubectl wait \
+        --for condition=Established \
+        --all CustomResourceDefinition \
+        --namespace=monitoring
+    kubectl apply -f manifests/
+    ```
 
 You can make Grafana reachable from your localhost using port-forwarding:
 
 ```bash
-kubectl -n monitoring port-forward svc/grafana 3000;
+kubectl -n monitoring port-forward svc/grafana 3000:80
 ```
 
 Navigate to `localhost:3000` and to the Alerting panel. Select `Contact Points` and create a new
