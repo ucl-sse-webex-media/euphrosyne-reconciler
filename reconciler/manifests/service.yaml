@@ -2,9 +2,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: euphrosyne-reconciler
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
 spec:
   selector:
-    app: euphrosyne-reconciler
+    app: orpheus-operator
+    component: euphrosyne-reconciler
   ports:
     - protocol: TCP
       port: 80
