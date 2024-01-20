@@ -32,12 +32,12 @@ class HTTPService():
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://thalia-aggregator.default.svc.cluster.local:80"
+    URL = "http://thalia-aggregator.default.svc.cluster.local"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
     def __init__(self, url=None):
         super().__init__(url=(url or self.URL))
-        self.sources = {source: f"{self.url}/sources/{source}" for source in self.SOURCES}
+        self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
 
     def get_source_url(self, source):
         """Get the base URL for a data source."""
@@ -45,7 +45,14 @@ class DataAggregator(HTTPService):
             raise ValueError(f"Invalid source: '{source}'. Valid sources are: {self.SOURCES}")
         return self.sources[source]
 
-    def get_grafana_dashboard(self, dashboard_id):
+    def get_grafana_dashboard(self, uuid, dashboard_id, panel_id):
         """Get a Grafana dashboard."""
-        url = f"{self.get_source_url('grafana')}/dashboards/{dashboard_id}"
-        return self.post(url, params={}, body={})
+        url = self.get_source_url("grafana")
+        body = {
+            "uuid": uuid,
+            "params": {
+                "dashboard_id": dashboard_id,
+                "panel_id": panel_id,
+            },
+        }
+        return self.post(url, params={}, body=body)
