@@ -2,15 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: euphrosyne-reconciler
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: euphrosyne-reconciler
+      app: orpheus-operator
+      component: euphrosyne-reconciler
   template:
     metadata:
       labels:
-        app: euphrosyne-reconciler
+        app: orpheus-operator
+        component: euphrosyne-reconciler
     spec:
       containers:
         - name: euphrosyne-reconciler
@@ -19,7 +24,7 @@ spec:
             - /reconciler
           args:
             - --webex-bot-address
-            - https://254c-31-205-79-63.ngrok-free.app
+            - https://2861-109-175-214-148.ngrok-free.app
             - --recipe-timeout
             - "300"
           ports:

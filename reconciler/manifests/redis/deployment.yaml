@@ -2,15 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: euphrosyne-reconciler-redis
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler-redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: euphrosyne-reconciler-redis
+      app: orpheus-operator
+      component: euphrosyne-reconciler-redis
   template:
     metadata:
       labels:
-        app: euphrosyne-reconciler-redis
+        app: orpheus-operator
+        component: euphrosyne-reconciler-redis
     spec:
       containers:
       - name: redis
