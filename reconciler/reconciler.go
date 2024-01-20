@@ -133,7 +133,8 @@ func (r *Reconciler) postMessageToWebexBot(messages []string) error {
 
 	// Send the POST request
 	time.Sleep(10 * time.Second)
-	resp, err := http.Post(webexBotAddress, "application/json", bytes.NewBuffer(jsonData))
+	url := fmt.Sprintf("%s/api/actions", webexBotAddress)
+	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
