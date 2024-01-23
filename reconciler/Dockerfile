@@ -5,7 +5,7 @@ COPY . .
 RUN go mod download
 RUN go build -o reconciler .
 
-FROM ubuntu:jammy
+FROM arm64v8/ubuntu:jammy
 WORKDIR /
 COPY --from=builder /workspace/reconciler .
 
