@@ -37,7 +37,7 @@ Default configuration set in config.go file used for local dev.
 
 ```
 cd recipes
-python -m scripts.dummy --data="{}" 
+python -m scripts.dummy --data '{"uuid":"123"}'   
 ```
 
 Default configuration set in config.py file used for local dev.

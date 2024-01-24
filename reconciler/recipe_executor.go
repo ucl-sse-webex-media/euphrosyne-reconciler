@@ -156,6 +156,5 @@ func buildRecipeCommand(recipeConfig RecipeConfig, alertData *map[string]interfa
 	for name, value := range recipeProdConfig {
 		recipeCommand += fmt.Sprintf("--%v '%v' ", name, value)
 	}
-	fmt.Println(recipeCommand)
 	return recipeCommand
 }

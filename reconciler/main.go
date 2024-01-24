@@ -20,9 +20,9 @@ var (
 	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
-	redisAddress string = Redis_Address
-	webexBotAddress string = Webex_Bot_Address
-	recipeTimeout   int = Recipe_Timeout
+	redisAddress string = RedisAddress
+	webexBotAddress string = WebexBotAddress
+	recipeTimeout   int = RecipeTimeout
 )
 
 func init() {
