@@ -1,3 +1,5 @@
+from .config import (Aggregator_Base_Url)
+from .util import parse_args
 import logging
 
 import requests
@@ -32,12 +34,20 @@ class HTTPService():
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://thalia-aggregator.default.svc.cluster.local"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
-    def __init__(self, url=None):
-        super().__init__(url=(url or self.URL))
+    def __init__(self):
+        super().__init__()
+        self.url = self.parse_base_url()
+        print(self.url)
         self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
+    
+    def parse_base_url(self):
+        parsed_args = parse_args()
+        if parsed_args.aggregator_base_url:
+            return parsed_args.aggregator_base_url
+        else:
+            return Aggregator_Base_Url
 
     def get_source_url(self, source):
         """Get the base URL for a data source."""

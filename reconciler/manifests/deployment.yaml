@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: euphrosyne-reconciler
-          image: phoevos/euphrosyne-reconciler:latest
+          image: maikeee32e/euphrosyne-reconciler:latest
           command:
             - /reconciler
           args:
@@ -27,6 +27,8 @@ spec:
             - https://2861-109-175-214-148.ngrok-free.app
             - --recipe-timeout
             - "300"
+            - --redis-address
+            - euphrosyne-reconciler-redis.default.svc.cluster.local:80
           ports:
             - containerPort: 8080
       serviceAccountName: euphrosyne-reconciler

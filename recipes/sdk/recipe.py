@@ -1,8 +1,7 @@
-import argparse
 import functools
 import json
 import logging
-
+from .util import parse_args
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -17,16 +16,11 @@ class Recipe():
         self.handler = handler
         self.redisClient = redis.Redis(host="euphrosyne-reconciler-redis", port=80)
 
-    @staticmethod
     def parse_input_data(func):
         """A decorator for parsing command-line arguments."""
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
-            parser.add_argument("--data", type=str, help="Recipe input data")
-
-            parsed_args = parser.parse_args()
-
+            parsed_args = parse_args()
             if parsed_args.data:
                 try:
                     data = json.loads(parsed_args.data)
