@@ -1,8 +1,7 @@
-from .config import (Aggregator_Base_Url)
+import requests
+from .config import AGGREGATOR_BASE_URL
 from .util import parse_args
 import logging
-
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +38,13 @@ class DataAggregator(HTTPService):
     def __init__(self):
         super().__init__()
         self.parsed_args = parse_args()
-        self.url = self.parse_base_url()
+        self.url = self._parse_base_url()
         self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
     
-    def parse_base_url(self):
+    def _parse_base_url(self):
         if self.parsed_args.aggregator_base_url:
             return self.parsed_args.aggregator_base_url
-        else:
-            return Aggregator_Base_Url
+        return AGGREGATOR_BASE_URL
 
     def get_source_url(self, source):
         """Get the base URL for a data source."""
