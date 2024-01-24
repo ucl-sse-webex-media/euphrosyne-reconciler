@@ -19,6 +19,9 @@ const (
 	jobNamespace       = "default"
 )
 
+var recipeProdConfig = map[string]string{
+	"aggregator-base-url":"http://thalia-aggregator.default.svc.cluster.local",
+}
 type RecipeConfig struct {
 	Image      string `yaml:"image"`
 	Entrypoint string `yaml:"entrypoint"`
@@ -148,5 +151,10 @@ func buildRecipeCommand(recipeConfig RecipeConfig, alertData *map[string]interfa
 	for _, param := range recipeConfig.Params {
 		recipeCommand += fmt.Sprintf("--%v '%v'", param.Name, string(alertDataStr))
 	}
+
+	for name, value := range recipeProdConfig {
+		recipeCommand += fmt.Sprintf("--%v '%v'", name, value)
+	}
+
 	return recipeCommand
 }

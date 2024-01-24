@@ -2,11 +2,11 @@ package main
 
 import (
 	"crypto/tls"
+	"context"
 	"flag"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/go-redis/redis/v8"
@@ -20,27 +20,30 @@ var (
 	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
-
-	webexBotAddress string
-	recipeTimeout   int
+	redisAddress string = Redis_Address
+	webexBotAddress string = Webex_Bot_Address
+	recipeTimeout   int = Recipe_Timeout
 )
 
 func init() {
 	flag.StringVar(
+		&redisAddress,
+		"redis-address",
+		redisAddress,
+		"Redis Address",
+	)
+
+	flag.StringVar(
 		&webexBotAddress,
 		"webex-bot-address",
-		os.Getenv("WEBEX_BOT_ADDRESS"),
+		webexBotAddress,
 		"HTTP address for the Webex Bot",
 	)
 
-	timeout, _ := strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
-	if timeout == 0 {
-		timeout = 300
-	}
 	flag.IntVar(
 		&recipeTimeout,
 		"recipe-timeout",
-		timeout,
+		recipeTimeout,
 		"Timeout in seconds for recipe execution",
 	)
 	flag.Parse()
@@ -84,19 +87,27 @@ func getHTTPClient() *http.Client {
 
 func main() {
 	httpc = getHTTPClient()
+
+	initLogger()
+
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
+		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
 
-	initLogger()
+	var err error
+	_, err = rdb.Ping(context.Background()).Result()
+    if err != nil {
+		logger.Error("Failed to connect to redis", zap.Error(err))
+        return
+    }
+	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
-	var err error
 	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
