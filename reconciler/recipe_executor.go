@@ -21,6 +21,7 @@ const (
 
 var recipeProdConfig = map[string]string{
 	"aggregator-base-url":"http://thalia-aggregator.default.svc.cluster.local",
+	"redis-address" :"euphrosyne-reconciler-redis:80",
 }
 type RecipeConfig struct {
 	Image      string `yaml:"image"`
@@ -149,12 +150,12 @@ func buildRecipeCommand(recipeConfig RecipeConfig, alertData *map[string]interfa
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
 	for _, param := range recipeConfig.Params {
-		recipeCommand += fmt.Sprintf("--%v '%v'", param.Name, string(alertDataStr))
+		recipeCommand += fmt.Sprintf("--%v '%v' ", param.Name, string(alertDataStr))
 	}
 
 	for name, value := range recipeProdConfig {
-		recipeCommand += fmt.Sprintf("--%v '%v'", name, value)
+		recipeCommand += fmt.Sprintf("--%v '%v' ", name, value)
 	}
-
+	fmt.Println(recipeCommand)
 	return recipeCommand
 }

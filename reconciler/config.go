@@ -1,8 +1,8 @@
 package main
 
-// used for local dev
+// only used for local dev
 const (
 	Redis_Address = "localhost:6379"
-	Webex_Bot_Address = "https://254c-31-205-79-63.ngrok-free.app"
+	Webex_Bot_Address = "https://2861-109-175-214-148.ngrok-free.app"
 	Recipe_Timeout = 300
 )
