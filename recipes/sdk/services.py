@@ -38,14 +38,13 @@ class DataAggregator(HTTPService):
 
     def __init__(self):
         super().__init__()
+        self.parsed_args = parse_args()
         self.url = self.parse_base_url()
-        print(self.url)
         self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
     
     def parse_base_url(self):
-        parsed_args = parse_args()
-        if parsed_args.aggregator_base_url:
-            return parsed_args.aggregator_base_url
+        if self.parsed_args.aggregator_base_url:
+            return self.parsed_args.aggregator_base_url
         else:
             return Aggregator_Base_Url
 
