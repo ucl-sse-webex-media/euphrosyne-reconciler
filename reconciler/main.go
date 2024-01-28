@@ -25,7 +25,7 @@ var (
 	recipeTimeout   int = RecipeTimeout
 )
 
-func init() {
+func parseConfig() {
 	flag.StringVar(
 		&redisAddress,
 		"redis-address",
@@ -85,16 +85,22 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func main() {
-	httpc = getHTTPClient()
-
-	initLogger()
-
+func connectRedis(){
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
+
+}
+
+func main() {
+	parseConfig()
+	httpc = getHTTPClient()
+
+	initLogger()
+
+	connectRedis()
 
 	var err error
 	_, err = rdb.Ping(context.Background()).Result()
