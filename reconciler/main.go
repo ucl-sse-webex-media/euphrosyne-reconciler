@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"net/http"
@@ -20,7 +21,7 @@ var (
 	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
-
+	redisAddress string = "localhost:6379"
 	webexBotAddress string
 	recipeTimeout   int
 )
@@ -84,11 +85,15 @@ func getHTTPClient() *http.Client {
 
 func connectRedis(){
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
+		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
-
+	_, err := rdb.Ping(context.Background()).Result()
+    if err != nil {
+		panic(err)
+    }
+	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
 }
 
 func main() {
