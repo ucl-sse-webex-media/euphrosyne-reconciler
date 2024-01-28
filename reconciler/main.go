@@ -91,7 +91,11 @@ func connectRedis(){
 		Password: "",
 		DB:       0,
 	})
-
+	_, err := rdb.Ping(context.Background()).Result()
+    if err != nil {
+		panic(err)
+    }
+	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
 }
 
 func main() {
@@ -103,13 +107,6 @@ func main() {
 	connectRedis()
 
 	var err error
-	_, err = rdb.Ping(context.Background()).Result()
-    if err != nil {
-		logger.Error("Failed to connect to redis", zap.Error(err))
-        return
-    }
-	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
-
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
