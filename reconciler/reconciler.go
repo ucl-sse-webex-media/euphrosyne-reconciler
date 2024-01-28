@@ -53,16 +53,25 @@ func NewAlertReconciler(
 // Run the reconciler to monitor the subscribed Redis channel for the outcome of each recipe.
 func (r *Reconciler) Run() {
 	defer r.Cleanup()
+	
+	// Collect recipe result
+	receivedMessages,_ := collectRecipeResult(r)
+
+	// Send received messages to Webex Bot
+	err := r.postMessageToWebexBot(receivedMessages)
+	if err != nil {
+		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
+		// FIXME: Handle the error as needed
+	}
+}
+
+func collectRecipeResult(r *Reconciler) ([]string,error) {
+	receivedMessages := []string{}
 	ch := r.pubsub.Channel()
-
 	messageCount := 0
-
 	timeoutDuration := time.Duration(recipeTimeout) * time.Second
 	timeout := time.NewTimer(timeoutDuration)
 	shouldBreak := false
-
-	var receivedMessages []string
-
 	for {
 		select {
 		case msg := <-ch:
@@ -92,24 +101,16 @@ func (r *Reconciler) Run() {
 				),
 			)
 		}
-
 		if shouldBreak {
 			break
 		}
 	}
-
-	// Send received messages to Webex Bot
-	err := r.postMessageToWebexBot(receivedMessages)
-	if err != nil {
-		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
-		// FIXME: Handle the error as needed
-	}
-
-	err = r.pubsub.Close()
+	err := r.pubsub.Close()
 	if err != nil {
 		logger.Error("Failed to close channel", zap.Error(err))
-		return
+		return nil,err
 	}
+	return receivedMessages,nil
 }
 
 // Parse recipe results from Redis message.

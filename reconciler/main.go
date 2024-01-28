@@ -25,7 +25,7 @@ var (
 	recipeTimeout   int
 )
 
-func init() {
+func parseConfig() {
 	flag.StringVar(
 		&webexBotAddress,
 		"webex-bot-address",
@@ -82,15 +82,22 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func main() {
-	httpc = getHTTPClient()
+func connectRedis(){
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
 		Password: "",
 		DB:       0,
 	})
 
+}
+
+func main() {
+	parseConfig()
+	httpc = getHTTPClient()
+
 	initLogger()
+
+	connectRedis()
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
