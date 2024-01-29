@@ -1,8 +1,8 @@
 package main
 
 import (
-	"crypto/tls"
 	"context"
+	"crypto/tls"
 	"flag"
 	"net/http"
 	"os"
@@ -26,6 +26,7 @@ var (
 )
 
 func parseConfig() {
+	// config priority: config.go < env variable < command line
 	flag.StringVar(
 		&redisAddress,
 		"redis-address",
@@ -46,6 +47,9 @@ func parseConfig() {
 		recipeTimeout,
 		"Timeout in seconds for recipe execution",
 	)
+
+	LoadEnvVariable()
+	
 	flag.Parse()
 }
 

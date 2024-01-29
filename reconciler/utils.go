@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -37,4 +38,18 @@ func InitialiseKubernetesClient() (*kubernetes.Clientset, error) {
 	}
 
 	return clientset, nil
+}
+
+func LoadEnvVariable(){
+	if os.Getenv("REDIS_ADDRESS")!=""{
+		redisAddress = os.Getenv("REDIS_ADDRESS")
+	}
+
+	if os.Getenv("WEBEX_BOT_ADDRESS")!=""{
+		redisAddress = os.Getenv("WEBEX_BOT_ADDRESS")
+	}
+
+	if os.Getenv("RECIPE_TIMEOUT")!=""{
+		redisAddress = os.Getenv("RECIPE_TIMEOUT")
+	}
 }
