@@ -16,7 +16,7 @@ func Test_CollectRecipeResult(t *testing.T){
     connectRedis()
 	var wg sync.WaitGroup
     wg.Add(2)
-
+    recipeTimeout = 20
     c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
 	r,err := NewAlertReconciler(c,alertData,recipeMap)
@@ -30,13 +30,13 @@ func Test_CollectRecipeResult(t *testing.T){
         time.Sleep(time.Second)
         rdb.Publish(c,(*alertData)["uuid"].(string),"{}")
     }()
-
+    
     go func() {
         defer wg.Done()
         time.Sleep(time.Second)
         rdb.Publish(c,(*alertData)["uuid"].(string),"{}")
     }()
-
+    
     receivedMessages,err := collectRecipeResult(r)
     assert.Nil(t,err)
     assert.Equal(t,2,len(receivedMessages))
@@ -60,9 +60,11 @@ func Test_CollectRecipeResult(t *testing.T){
         defer wg.Done()
         time.Sleep(3)
     }()
-
+    
     receivedMessages,err = collectRecipeResult(r)
     assert.Nil(t,err)
     assert.Equal(t,1,len(receivedMessages))
+
+    wg.Wait()    
 }
 
