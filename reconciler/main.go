@@ -1,8 +1,8 @@
 package main
 
 import (
-	"crypto/tls"
 	"context"
+	"crypto/tls"
 	"flag"
 	"net/http"
 	"os"
@@ -46,6 +46,9 @@ func init() {
 		recipeTimeout,
 		"Timeout in seconds for recipe execution",
 	)
+
+	loadEnvVariables()
+	
 	flag.Parse()
 }
 
