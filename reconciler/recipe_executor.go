@@ -19,6 +19,7 @@ var (
 	jobNamespace       = "default"
 )
 
+// RecipeConfig struct
 type RecipeConfig struct {
 	Image      string `yaml:"image"`
 	Entrypoint string `yaml:"entrypoint"`
@@ -29,7 +30,7 @@ type RecipeConfig struct {
 }
 
 // Initialise and run the recipe executor.
-func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
+func startRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 	// retrieve recipes from ConfigMap
 	recipes, err := getRecipesFromConfigMap()
 	if err != nil {
@@ -37,7 +38,7 @@ func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 		return
 	}
 
-	reconciler, err := NewAlertReconciler(c, alertData, recipes)
+	reconciler, err := newAlertReconciler(c, alertData, recipes)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
 		return

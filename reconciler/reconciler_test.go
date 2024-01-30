@@ -19,7 +19,7 @@ func Test_CollectRecipeResult(t *testing.T){
     recipeTimeout = 20
     c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
-	r,err := NewAlertReconciler(c,alertData,recipeMap)
+	r,err := newAlertReconciler(c,alertData,recipeMap)
     assert.NotNil(t,r)
     assert.Nil(t,err)
 
@@ -46,7 +46,7 @@ func Test_CollectRecipeResult(t *testing.T){
     wg.Add(2)
     recipeTimeout = 2
 
-    r,err = NewAlertReconciler(c,alertData,recipeMap)
+    r,err = newAlertReconciler(c,alertData,recipeMap)
     assert.NotNil(t,r)
     assert.Nil(t,err)
 

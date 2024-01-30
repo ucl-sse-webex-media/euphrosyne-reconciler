@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Reconciler struct
 type Reconciler struct {
 	uuid      string
 	alertData *map[string]interface{}
@@ -21,13 +22,14 @@ type Reconciler struct {
 	recipes   map[string]RecipeConfig
 }
 
+// Recipe Recipe Result
 type Recipe struct {
 	Status  string `json:"status"`
 	Results string `json:"results"`
 }
 
 // Initialise a reconciler for a specific alert.
-func NewAlertReconciler(
+func newAlertReconciler(
 	c *gin.Context, alertData *map[string]interface{}, recipes map[string]RecipeConfig,
 ) (*Reconciler, error) {
 	uuid := (*alertData)["uuid"].(string)

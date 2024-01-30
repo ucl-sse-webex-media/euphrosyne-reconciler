@@ -20,7 +20,7 @@ func getKubeconfigPath() string {
 }
 
 // Initialise a Kubernetes client.
-func InitialiseKubernetesClient() (*kubernetes.Clientset, error) {
+func initialiseKubernetesClient() (*kubernetes.Clientset, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		config, err = clientcmd.BuildConfigFromFlags("", getKubeconfigPath())

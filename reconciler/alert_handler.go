@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartAlertHandler() {
+func startAlertHandler() {
 	router := gin.Default()
 	router.POST("/webhook", func(ctx *gin.Context) { handleWebhook(ctx) })
 
@@ -31,7 +31,7 @@ func handleWebhook(c *gin.Context) {
 	logger.Info("Alert received", zap.Any("alert", alertData))
 
 	// Start the recipe executor
-	go StartRecipeExecutor(c, &alertData)
+	go startRecipeExecutor(c, &alertData)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Alert received and processed"})
 }

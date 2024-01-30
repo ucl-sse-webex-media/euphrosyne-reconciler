@@ -104,7 +104,7 @@ func init(){
 	configMapName = testConfigMapName
 	jobNamespace = testJobNamespace
 	var err error
-	clientset,err = InitialiseKubernetesClient()
+	clientset,err = initialiseKubernetesClient()
 	if err != nil {
 		panic(err)
 	}

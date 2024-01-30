@@ -109,13 +109,13 @@ func main() {
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
 	var err error
-	clientset, err = InitialiseKubernetesClient()
+	clientset, err = initialiseKubernetesClient()
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
 	}
 
-	go StartAlertHandler()
+	go startAlertHandler()
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
