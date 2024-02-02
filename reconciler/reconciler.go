@@ -26,6 +26,13 @@ type Recipe struct {
 	Results string `json:"results"`
 }
 
+type JobStatus struct {
+	Name      string `json:"name"`
+	StartTime string `json:"startTime"`
+	Status    string `json:"status"`
+	Labels    map[string]string
+}
+
 // Initialise a reconciler for a specific alert.
 func NewAlertReconciler(
 	c *gin.Context, alertData *map[string]interface{}, recipes map[string]RecipeConfig,
@@ -110,6 +117,8 @@ func (r *Reconciler) Run() {
 		logger.Error("Failed to close channel", zap.Error(err))
 		return
 	}
+
+	go StartBotResponseHandler(r)
 }
 
 // Parse recipe results from Redis message.
@@ -190,4 +199,32 @@ func (r *Reconciler) deleteCompletedJobsWithLabels(labels map[string]string) err
 	}
 
 	return nil
+}
+
+func (r *Reconciler) getJobStatus() ([]JobStatus, error) {
+	jobClient, err := clientset.BatchV1().Jobs("default").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var allJobStatuses []JobStatus
+
+	for _, job := range jobClient.Items {
+		jobStatus := JobStatus{
+			Name:      job.Name,
+			StartTime: job.CreationTimestamp.Time.Format(time.RFC3339),
+			Labels:    job.Labels,
+		}
+
+		if job.Status.Active > 0 {
+			jobStatus.Status = "Active"
+		} else if job.Status.Succeeded > 0 {
+			jobStatus.Status = "Completed"
+		} else if job.Status.Failed > 0 {
+			jobStatus.Status = "Failed"
+		}
+		allJobStatuses = append(allJobStatuses, jobStatus)
+	}
+
+	return allJobStatuses, nil
 }
