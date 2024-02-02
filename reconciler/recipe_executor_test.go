@@ -2,22 +2,23 @@ package main
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	testConfigMapName = "orpheus-operator-recipes-test"
-	testNamespace = "orpheus-test" // use a test namespace
-	testJobNamespace = "orpheus-test"
+	testNamespace     = "orpheus-test" // use a test namespace
+	testJobNamespace  = "orpheus-test"
 )
 
 var recipeConfig1 = RecipeConfig{
-	Image: "maikeee32e/euphrosyne-recipes-test:latest",
+	Image:      "maikeee32e/euphrosyne-recipes-test:latest",
 	Entrypoint: "test-1-recipe",
 	Params: []struct {
 		Name  string `yaml:"name"`
@@ -28,7 +29,7 @@ var recipeConfig1 = RecipeConfig{
 }
 
 var recipeConfig2 = RecipeConfig{
-	Image: "maikeee32e/euphrosyne-recipes-test:latest",
+	Image:      "maikeee32e/euphrosyne-recipes-test:latest",
 	Entrypoint: "test-2-recipe",
 	Params: []struct {
 		Name  string `yaml:"name"`
@@ -38,12 +39,7 @@ var recipeConfig2 = RecipeConfig{
 	},
 }
 
-var recipeMap = map[string]RecipeConfig{
-	"test-1-recipe" : recipeConfig1,
-	"test-2-recipe" : recipeConfig2,
-}
-//test-1-recipe contains a single redis publish msg process
-//test-2-recipe has some bugs and fails to run
+// just the literal defination, did not define the real recipe for test
 var configMap = map[string]string{
 	"test-1-recipe": `image: "maikeee32e/euphrosyne-recipes-test:latest"
 entrypoint: "test-1-recipe"
@@ -62,6 +58,8 @@ var alertData = &map[string]interface{}{
 	"uuid": "123",
 }
 
+var c *gin.Context
+
 func createTestNamespace() {
 	testNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,13 +72,13 @@ func createTestNamespace() {
 	}
 }
 
-func createTestConfigmap() error{
-	configMapObj := &v1.ConfigMap{
+func createTestConfigmap(cMap map[string]string) error {
+	configMapObj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testConfigMapName,
 			Namespace: testNamespace,
 		},
-		Data: configMap,
+		Data: cMap,
 	}
 	_, err := clientset.CoreV1().ConfigMaps(testNamespace).Create(context.TODO(), configMapObj, metav1.CreateOptions{})
 	if err != nil {
@@ -91,59 +89,60 @@ func createTestConfigmap() error{
 
 func deleteTestConfigmap() {
 	err := clientset.CoreV1().ConfigMaps(testNamespace).Delete(context.TODO(), testConfigMapName, metav1.DeleteOptions{})
-    if err != nil {
+	if err != nil {
 		panic(err)
-    }
+	}
 }
 
-
-func init(){
+func init() {
 	initLogger()
 
 	configMapNamespace = testNamespace
 	configMapName = testConfigMapName
 	jobNamespace = testJobNamespace
 	var err error
-	clientset,err = initialiseKubernetesClient()
+	clientset, err = initialiseKubernetesClient()
 	if err != nil {
 		panic(err)
 	}
 	// check whether the test namespace exists
-	_, err = clientset.CoreV1().Namespaces().Get(context.TODO(),testNamespace,metav1.GetOptions{})
+	_, err = clientset.CoreV1().Namespaces().Get(context.TODO(), testNamespace, metav1.GetOptions{})
 	if err != nil {
 		createTestNamespace()
 	}
+
+	w := httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+
 }
 
-// unit test 
-func Test_GetRecipeConfig(t *testing.T){
+// unit test
+func Test_GetRecipeConfig(t *testing.T) {
 	defer deleteTestConfigmap()
 
-	err := createTestConfigmap()
-	assert.Nil(t,err)
+	testRecipeMap := map[string]RecipeConfig{
+		"test-1-recipe": recipeConfig1,
+		"test-2-recipe": recipeConfig2,
+	}
 
-	recipe,err := getRecipesFromConfigMap()
-	assert.Nil(t,err)
-	assert.Equal(t,2,len(recipe))
+	err := createTestConfigmap(configMap)
+	assert.Nil(t, err)
 
-	assert.Equal(t,recipeMap["test-1-recipe"],recipe["test-1-recipe"])
-	assert.Equal(t,recipeMap["test-2-recipe"],recipe["test-2-recipe"])
+	recipe, err := getRecipesFromConfigMap()
+	assert.Nil(t, err)
+	assert.Equal(t, len(testRecipeMap), len(recipe))
+
+	assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
+	assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
 }
 
-
-func Test_CreateJob(t *testing.T){
-	job, err := createJob("test-1-recipe",recipeMap["test-1-recipe"],alertData)
-	assert.NotNil(t,job)
-	assert.Nil(t,err)
+func Test_CreateJob(t *testing.T) {
+	job, err := createJob("test-1-recipe", recipeConfig1, alertData)
+	assert.NotNil(t, job)
+	assert.Nil(t, err)
 	getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})
-	assert.NotNil(t,getJob)
-	assert.Nil(t,err)
+	assert.NotNil(t, getJob)
+	assert.Nil(t, err)
 	err = clientset.BatchV1().Jobs(testNamespace).Delete(context.TODO(), job.Name, metav1.DeleteOptions{})
-	assert.Nil(t,err)
-}
-
-
-// integration test
-func Test_StartRecipeExecutor(t *testing.T){
-
+	assert.Nil(t, err)
 }
