@@ -56,3 +56,10 @@ class DataAggregator(HTTPService):
             },
         }
         return self.post(url, params={}, body=body)
+    
+    def get_data_from_alert(self,alert):
+        "Get the data from the Aggregator based on the alert "
+        body={
+            alert:alert
+        }
+        return self.post(self.url,params={},body=body)
