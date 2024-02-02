@@ -18,17 +18,12 @@ type Reconciler struct {
 	uuid      string
 	alertData *map[string]interface{}
 	pubsub    *redis.PubSub
-	recipes   map[string]RecipeConfig
-}
-
-type Recipe struct {
-	Status  string `json:"status"`
-	Results string `json:"results"`
+	recipes   map[string]Recipe
 }
 
 // Initialise a reconciler for a specific alert.
 func NewAlertReconciler(
-	c *gin.Context, alertData *map[string]interface{}, recipes map[string]RecipeConfig,
+	c *gin.Context, alertData *map[string]interface{}, recipes map[string]Recipe,
 ) (*Reconciler, error) {
 	uuid := (*alertData)["uuid"].(string)
 
@@ -61,7 +56,7 @@ func (r *Reconciler) Run() {
 	timeout := time.NewTimer(timeoutDuration)
 	shouldBreak := false
 
-	var receivedMessages []string
+	var completedRecipes []Recipe
 
 	for {
 		select {
@@ -76,7 +71,11 @@ func (r *Reconciler) Run() {
 				zap.String("channel", msg.Channel),
 				zap.Any("payload", recipe),
 			)
-			receivedMessages = append(receivedMessages, recipe.Results)
+			// Update the Reconciler recipe with the execution results
+			recipe.Config = r.recipes[recipe.Execution.Name].Config
+			r.recipes[recipe.Execution.Name] = recipe
+
+			completedRecipes = append(completedRecipes, recipe)
 			messageCount++
 			if messageCount == len(r.recipes) {
 				shouldBreak = true
@@ -98,8 +97,12 @@ func (r *Reconciler) Run() {
 		}
 	}
 
-	// Send received messages to Webex Bot
-	err := r.postMessageToWebexBot(receivedMessages)
+	botMessage := IncidentBotMessage{
+		UUID:     r.uuid,
+		Analysis: r.getIncidentAnalysis(completedRecipes),
+		Actions:  "",
+	}
+	err := r.postMessageToWebexBot(botMessage)
 	if err != nil {
 		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
 		// FIXME: Handle the error as needed
@@ -112,10 +115,27 @@ func (r *Reconciler) Run() {
 	}
 }
 
+// Aggregate the results of all recipes.
+func (r *Reconciler) getIncidentAnalysis(completedRecipes []Recipe) string {
+	var incidentAnalysis string
+	for _, recipe := range completedRecipes {
+		if recipe.Execution.Status == "successful" {
+			message := fmt.Sprintf(
+				"Recipe '%s' completed successfully in response to incident '%s': %s",
+				recipe.Execution.Name,
+				recipe.Execution.Incident,
+				recipe.Execution.Results.Analysis,
+			)
+			incidentAnalysis += message + " "
+		}
+	}
+	return incidentAnalysis
+}
+
 // Parse recipe results from Redis message.
 func (r *Reconciler) parseRecipeResults(message string) (Recipe, error) {
 	var recipe Recipe
-	err := json.Unmarshal([]byte(message), &recipe)
+	err := json.Unmarshal([]byte(message), &recipe.Execution)
 	if err != nil {
 		return Recipe{}, err
 	}
@@ -124,16 +144,15 @@ func (r *Reconciler) parseRecipeResults(message string) (Recipe, error) {
 }
 
 // Post message to Webex Bot.
-func (r *Reconciler) postMessageToWebexBot(messages []string) error {
+func (r *Reconciler) postMessageToWebexBot(message IncidentBotMessage) error {
 	// Convert the messages to JSON
-	jsonData, err := json.Marshal(messages)
+	jsonData, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
 
 	// Send the POST request
-	time.Sleep(10 * time.Second)
-	url := fmt.Sprintf("%s/api/actions", webexBotAddress)
+	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
