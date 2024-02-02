@@ -47,7 +47,10 @@ func NewAlertReconciler(
 
 // Run the reconciler to monitor the subscribed Redis channel for the outcome of each recipe.
 func (r *Reconciler) Run() {
-	defer r.Cleanup()
+	var completedRecipes []Recipe
+	defer func() {
+		r.Cleanup(completedRecipes)
+	}()
 	ch := r.pubsub.Channel()
 
 	messageCount := 0
@@ -55,8 +58,6 @@ func (r *Reconciler) Run() {
 	timeoutDuration := time.Duration(recipeTimeout) * time.Second
 	timeout := time.NewTimer(timeoutDuration)
 	shouldBreak := false
-
-	var completedRecipes []Recipe
 
 	for {
 		select {
@@ -168,7 +169,7 @@ func (r *Reconciler) postMessageToWebexBot(message IncidentBotMessage) error {
 }
 
 // Cleanup at the end of the reconciler execution.
-func (r *Reconciler) Cleanup() {
+func (r *Reconciler) Cleanup(completedRecipes []Recipe) {
 	logger.Info("Cleaning up created resources")
 
 	// Delete the completed recipe Jobs
@@ -176,36 +177,38 @@ func (r *Reconciler) Cleanup() {
 		"app":  "euphrosyne",
 		"uuid": r.uuid,
 	}
-	err := r.deleteCompletedJobsWithLabels(labels)
+	err := r.deleteCompletedJobsWithLabels(completedRecipes, labels)
 	if err != nil {
 		logger.Error("Failed to delete completed Jobs", zap.Error(err))
 	}
 }
 
 // Delete completed Kubernetes Jobs with the specified labels.
-func (r *Reconciler) deleteCompletedJobsWithLabels(labels map[string]string) error {
+func (r *Reconciler) deleteCompletedJobsWithLabels(
+	completedRecipes []Recipe, labels map[string]string,
+) error {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
-
-	labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
-	fieldSelector := "status.successful=1"
-
-	logger.Info(
-		"Deleting completed recipe Jobs with the following conditions",
-		zap.String("labelSelector", labelSelector),
-		zap.String("fieldSelector", fieldSelector),
-	)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
 		PropagationPolicy: &propagationPolicy,
 	}
-	listOptions := metav1.ListOptions{
-		LabelSelector: labelSelector,
-		FieldSelector: fieldSelector,
-	}
-	err := jobClient.DeleteCollection(context.TODO(), deleteOptions, listOptions)
-	if err != nil {
-		return err
+
+	for _, recipe := range completedRecipes {
+		labels["recipe"] = recipe.Execution.Name
+		labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
+
+		logger.Info(
+			"Deleting completed recipe Job with the following labels",
+			zap.String("labelSelector", labelSelector),
+		)
+		err := jobClient.DeleteCollection(
+			context.TODO(), deleteOptions, metav1.ListOptions{LabelSelector: labelSelector},
+		)
+		if err != nil {
+
+			return err
+		}
 	}
 
 	return nil
