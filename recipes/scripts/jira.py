@@ -1,10 +1,10 @@
 import requests
 import json
 import base64
-
+# TODO: start a webex discussion
 email = 'bambooliulala@gmail.com'
 token = 'ATATT3xFfGF0Ofo12ijF8Js4pmEnX7pDp-FcpEhIawOAqxgR7NmYOgGn1EYe_7G_-44bdEGLQ3RsLrgpq59jC0W0xqz0gCLOSpz4AmXLN_M3md_JptK-amGAjyz7rH7idqZIDZFZTUPKcaUlmnHOiG4CwpssqafHXNhEZJBA2995D3-8X-wohvc=7894AA6C'
-
+# TODO: define in kubernetes cluster secrets: reconciler / recipe
 credentials = f'{email}:{token}'
 encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
@@ -21,6 +21,7 @@ headers = {
 # TODO: get fields from other recipes
 summary_text = "Summit 2019 is awesome!"
 description_text = "This is the description."
+# TODO: format the code to those handler, get data from parameters
 data = {
     "fields": {
         "summary": summary_text,
