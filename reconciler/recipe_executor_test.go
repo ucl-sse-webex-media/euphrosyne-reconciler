@@ -17,25 +17,29 @@ const (
 	testJobNamespace  = "orpheus-test"
 )
 
-var recipeConfig1 = RecipeConfig{
-	Image:      "maikeee32e/euphrosyne-recipes-test:latest",
-	Entrypoint: "test-1-recipe",
-	Params: []struct {
-		Name  string `yaml:"name"`
-		Value string `yaml:"value"`
-	}{
-		{Name: "data", Value: "dummy"},
+var recipe_1 = Recipe{
+	Config:&RecipeConfig{
+		Image:      "maikeee32e/euphrosyne-recipes-test:latest",
+		Entrypoint: "test-1-recipe",
+		Params: []struct {
+			Name  string `yaml:"name"`
+			Value string `yaml:"value"`
+		}{
+			{Name: "data", Value: "dummy"},
+		},
 	},
 }
 
-var recipeConfig2 = RecipeConfig{
-	Image:      "maikeee32e/euphrosyne-recipes-test:latest",
-	Entrypoint: "test-2-recipe",
-	Params: []struct {
-		Name  string `yaml:"name"`
-		Value string `yaml:"value"`
-	}{
-		{Name: "data", Value: "dummy"},
+var recipe_2 = Recipe{
+	Config: &RecipeConfig{
+		Image:      "maikeee32e/euphrosyne-recipes-test:latest",
+		Entrypoint: "test-2-recipe",
+		Params: []struct {
+			Name  string `yaml:"name"`
+			Value string `yaml:"value"`
+		}{
+			{Name: "data", Value: "dummy"},
+		},
 	},
 }
 
@@ -114,15 +118,17 @@ func init() {
 	w := httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 
+	// make sure redis is started
+	connectRedis()
 }
 
 // unit test
 func Test_GetRecipeConfig(t *testing.T) {
 	defer deleteTestConfigmap()
 
-	testRecipeMap := map[string]RecipeConfig{
-		"test-1-recipe": recipeConfig1,
-		"test-2-recipe": recipeConfig2,
+	testRecipeMap := map[string]Recipe{
+		"test-1-recipe": recipe_1,
+		"test-2-recipe": recipe_2,
 	}
 
 	err := createTestConfigmap(configMap)
@@ -137,7 +143,7 @@ func Test_GetRecipeConfig(t *testing.T) {
 }
 
 func Test_CreateJob(t *testing.T) {
-	job, err := createJob("test-1-recipe", recipeConfig1, alertData)
+	job, err := createJob("test-1-recipe", recipe_1, alertData)
 	assert.NotNil(t, job)
 	assert.Nil(t, err)
 	getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})

@@ -15,19 +15,19 @@ import (
 
 // unit test
 func Test_CollectRecipeResult(t *testing.T) {
-	// make sure redis is started
-	connectRedis()
 	var wg sync.WaitGroup
 	wg.Add(2)
-	recipeTimeout = 5
-
+	recipeTimeout = 2
+	
 	// simulate that there are 2 recipes
-	testRecipeMap := map[string]RecipeConfig{
-		"test-1-recipe": recipeConfig1,
-		"test-2-recipe": recipeConfig2,
+	testRecipeMap := map[string]Recipe{
+		"test-1-recipe": recipe_1,
+		"test-2-recipe": recipe_2,
 	}
 
-	r, err := newAlertReconciler(c, alertData, testRecipeMap)
+	recipeMsg1 := `{"name": "test-1-recipe"}`
+	recipeMsg2 := `{"name": "test-2-recipe"}`
+	r, err := NewAlertReconciler(c, alertData, testRecipeMap)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -35,40 +35,40 @@ func Test_CollectRecipeResult(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(time.Second)
-		rdb.Publish(c, (*alertData)["uuid"].(string), "{}")
+		rdb.Publish(c, (*alertData)["uuid"].(string), recipeMsg1)
 	}()
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(time.Second)
-		rdb.Publish(c, (*alertData)["uuid"].(string), "{}")
+		rdb.Publish(c, (*alertData)["uuid"].(string), recipeMsg2)
 	}()
 
-	receivedMessages, err := collectRecipeResult(r)
+	completedRecipes, err := collectRecipeResult(r)
+
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(receivedMessages))
+	assert.Equal(t, 2, len(completedRecipes))
 	wg.Wait()
 
 	// 1 recipe timeout
 	wg.Add(2)
-	recipeTimeout = 2
-	r, err = newAlertReconciler(c, alertData, testRecipeMap)
+	r, err = NewAlertReconciler(c, alertData, testRecipeMap)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(time.Second)
-		rdb.Publish(c, (*alertData)["uuid"].(string), "{}")
+		rdb.Publish(c, (*alertData)["uuid"].(string), recipeMsg1)
 	}()
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(3 * time.Second)
 	}()
-	receivedMessages, err = collectRecipeResult(r)
+	completedRecipes, err = collectRecipeResult(r)
 	assert.Nil(t, err)
-	assert.Equal(t, 1, len(receivedMessages))
+	assert.Equal(t, 1, len(completedRecipes))
 	wg.Wait()
 }
 
@@ -79,7 +79,7 @@ func Test_Cleanup(t *testing.T) {
 			GenerateName: "test-job-",
 			Labels: map[string]string{
 				"app":     "euphrosyne",
-				"recipes": "",
+				"recipe": "test-job",
 				"uuid":    (*alertData)["uuid"].(string),
 			},
 			Namespace: jobNamespace,
@@ -89,7 +89,7 @@ func Test_Cleanup(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						"app":     "euphrosyne",
-						"recipes": "",
+						"recipe": "test-job",
 						"uuid":    (*alertData)["uuid"].(string),
 					},
 				},
@@ -107,7 +107,12 @@ func Test_Cleanup(t *testing.T) {
 		},
 	}
 
-	r, err := newAlertReconciler(c, alertData, nil)
+	completedRecipe := Recipe{Execution: &struct{Name string "json:\"name\""; Incident string "json:\"incident\""; Status string "json:\"status\""; Results struct{Analysis string "json:\"analysis\""; JSON string "json:\"json\""; Links []string "json:\"links\""} "json:\"results\""}{Name: "test-job"}}
+	completedRecipes := []Recipe{
+		completedRecipe,
+	}
+
+	r, err := NewAlertReconciler(c, alertData, nil)
 	assert.Nil(t, err)
 
 	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(context.TODO(), jobObj, metav1.CreateOptions{})
@@ -119,7 +124,7 @@ func Test_Cleanup(t *testing.T) {
 		assert.NotNil(t, getJob)
 		assert.Nil(t, err)
 		if getJob.Status.Succeeded > 0 {
-			r.Cleanup()
+			r.Cleanup(completedRecipes)
 			getJob, err = clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})
 			assert.Equal(t, true, errors.IsNotFound(err))
 			assert.Equal(t, "", getJob.Name)

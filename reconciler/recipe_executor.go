@@ -19,34 +19,24 @@ var (
 	jobNamespace       = "default"
 )
 
-// RecipeConfig struct
-type RecipeConfig struct {
-	Image      string `yaml:"image"`
-	Entrypoint string `yaml:"entrypoint"`
-	Params     []struct {
-		Name  string `yaml:"name"`
-		Value string `yaml:"value"`
-	} `yaml:"params"`
-}
-
 // Initialise and run the recipe executor.
-func startRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
-	// retrieve recipes from ConfigMap
+func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
+	// Retrieve recipes from ConfigMap
 	recipes, err := getRecipesFromConfigMap()
 	if err != nil {
 		logger.Error("Failed to retrieve recipes from ConfigMap", zap.Error(err))
 		return
 	}
 
-	reconciler, err := newAlertReconciler(c, alertData, recipes)
+	reconciler, err := NewAlertReconciler(c, alertData, recipes)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
 		return
 	}
 
 	// Create a Job for each recipe
-	for recipeName, recipeConfig := range recipes {
-		_, err := createJob(recipeName, recipeConfig, alertData)
+	for recipeName, recipe := range recipes {
+		_, err := createJob(recipeName, recipe, alertData)
 		if err != nil {
 			logger.Error("Failed to create K8s Job", zap.Error(err))
 			// FIXME: Handle the error as needed
@@ -59,7 +49,7 @@ func startRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 }
 
 // Retrieve recipes from ConfigMap.
-func getRecipesFromConfigMap() (map[string]RecipeConfig, error) {
+func getRecipesFromConfigMap() (map[string]Recipe, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(configMapNamespace).Get(
 		context.TODO(), configMapName, metav1.GetOptions{},
 	)
@@ -67,7 +57,7 @@ func getRecipesFromConfigMap() (map[string]RecipeConfig, error) {
 		return nil, err
 	}
 
-	recipes := make(map[string]RecipeConfig)
+	recipes := make(map[string]Recipe)
 	for key, value := range configMap.Data {
 		// Parse the value as YAML into RecipeConfig
 		var recipeConfig RecipeConfig
@@ -77,15 +67,15 @@ func getRecipesFromConfigMap() (map[string]RecipeConfig, error) {
 			// FIXME: Handle the error as needed
 			continue
 		}
-
-		recipes[key] = recipeConfig
+		recipes[key] = Recipe{Config: &recipeConfig}
 	}
-
 	return recipes, nil
 }
 
 // Create a Kubernetes Job to execute a recipe.
-func createJob(recipeName string, recipeConfig RecipeConfig, alertData *map[string]interface{}) (*batchv1.Job, error) {
+func createJob(
+	recipeName string, recipe Recipe, alertData *map[string]interface{},
+) (*batchv1.Job, error) {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
 
 	// Define the Job object
@@ -112,11 +102,11 @@ func createJob(recipeName string, recipeConfig RecipeConfig, alertData *map[stri
 					Containers: []corev1.Container{
 						{
 							Name:  "recipe-container",
-							Image: recipeConfig.Image,
+							Image: recipe.Config.Image,
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								buildRecipeCommand(recipeConfig, alertData),
+								buildRecipeCommand(recipe.Config, alertData),
 							},
 						},
 					},
@@ -138,7 +128,7 @@ func createJob(recipeName string, recipeConfig RecipeConfig, alertData *map[stri
 }
 
 // Build Recipe command.
-func buildRecipeCommand(recipeConfig RecipeConfig, alertData *map[string]interface{}) string {
+func buildRecipeCommand(recipeConfig *RecipeConfig, alertData *map[string]interface{}) string {
 	alertDataStr, err := json.Marshal(alertData)
 	if err != nil {
 		logger.Error("Failed to convert alertData to string", zap.Error(err))

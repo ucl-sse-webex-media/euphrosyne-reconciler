@@ -19,18 +19,12 @@ type Reconciler struct {
 	uuid      string
 	alertData *map[string]interface{}
 	pubsub    *redis.PubSub
-	recipes   map[string]RecipeConfig
-}
-
-// Recipe Recipe Result
-type Recipe struct {
-	Status  string `json:"status"`
-	Results string `json:"results"`
+	recipes   map[string]Recipe
 }
 
 // Initialise a reconciler for a specific alert.
-func newAlertReconciler(
-	c *gin.Context, alertData *map[string]interface{}, recipes map[string]RecipeConfig,
+func NewAlertReconciler(
+	c *gin.Context, alertData *map[string]interface{}, recipes map[string]Recipe,
 ) (*Reconciler, error) {
 	uuid := (*alertData)["uuid"].(string)
 
@@ -53,22 +47,29 @@ func newAlertReconciler(
 }
 
 // Run the reconciler to monitor the subscribed Redis channel for the outcome of each recipe.
-func (r *Reconciler) Run() {
-	defer r.Cleanup()
-	
+func (r *Reconciler) Run() {	
 	// Collect recipe result
-	receivedMessages,_ := collectRecipeResult(r)
+	completedRecipes,_ := collectRecipeResult(r)
+
+	defer func() {
+		r.Cleanup(completedRecipes)
+	}()
 
 	// Send received messages to Webex Bot
-	err := r.postMessageToWebexBot(receivedMessages)
+	botMessage := IncidentBotMessage{
+		UUID:     r.uuid,
+		Analysis: r.getIncidentAnalysis(completedRecipes),
+		Actions:  "",
+	}
+	err := r.postMessageToWebexBot(botMessage)
 	if err != nil {
 		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
 		// FIXME: Handle the error as needed
 	}
 }
 
-func collectRecipeResult(r *Reconciler) ([]string,error) {
-	receivedMessages := []string{}
+func collectRecipeResult(r *Reconciler) ([]Recipe,error) {
+	var completedRecipes []Recipe
 	ch := r.pubsub.Channel()
 	messageCount := 0
 	timeoutDuration := time.Duration(recipeTimeout) * time.Second
@@ -79,7 +80,8 @@ func collectRecipeResult(r *Reconciler) ([]string,error) {
 		case msg := <-ch:
 			// Parse the recipe results from the Redis message
 			recipe, err := r.parseRecipeResults(msg.Payload)
-			if err != nil {
+			
+			if err != nil{
 				logger.Error("Failed to parse recipe results", zap.Error(err))
 			}
 			logger.Info(
@@ -87,7 +89,10 @@ func collectRecipeResult(r *Reconciler) ([]string,error) {
 				zap.String("channel", msg.Channel),
 				zap.Any("payload", recipe),
 			)
-			receivedMessages = append(receivedMessages, recipe.Results)
+			// Update the Reconciler recipe with the execution results
+			recipe.Config = r.recipes[recipe.Execution.Name].Config
+			r.recipes[recipe.Execution.Name] = recipe
+			completedRecipes = append(completedRecipes, recipe)
 			messageCount++
 			if messageCount == len(r.recipes) {
 				shouldBreak = true
@@ -107,36 +112,52 @@ func collectRecipeResult(r *Reconciler) ([]string,error) {
 			break
 		}
 	}
+
 	err := r.pubsub.Close()
 	if err != nil {
 		logger.Error("Failed to close channel", zap.Error(err))
 		return nil,err
 	}
-	return receivedMessages,nil
+	return completedRecipes,nil
+}
+
+// Aggregate the results of all recipes.
+func (r *Reconciler) getIncidentAnalysis(completedRecipes []Recipe) string {
+	var incidentAnalysis string
+	for _, recipe := range completedRecipes {
+		if recipe.Execution.Status == "successful" {
+			message := fmt.Sprintf(
+				"Recipe '%s' completed successfully in response to incident '%s': %s",
+				recipe.Execution.Name,
+				recipe.Execution.Incident,
+				recipe.Execution.Results.Analysis,
+			)
+			incidentAnalysis += message + " "
+		}
+	}
+	return incidentAnalysis
 }
 
 // Parse recipe results from Redis message.
 func (r *Reconciler) parseRecipeResults(message string) (Recipe, error) {
 	var recipe Recipe
-	err := json.Unmarshal([]byte(message), &recipe)
+	err := json.Unmarshal([]byte(message), &recipe.Execution)
 	if err != nil {
 		return Recipe{}, err
 	}
-
 	return recipe, nil
 }
 
 // Post message to Webex Bot.
-func (r *Reconciler) postMessageToWebexBot(messages []string) error {
+func (r *Reconciler) postMessageToWebexBot(message IncidentBotMessage) error {
 	// Convert the messages to JSON
-	jsonData, err := json.Marshal(messages)
+	jsonData, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
 
 	// Send the POST request
-	time.Sleep(10 * time.Second)
-	url := fmt.Sprintf("%s/api/actions", webexBotAddress)
+	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -152,7 +173,7 @@ func (r *Reconciler) postMessageToWebexBot(messages []string) error {
 }
 
 // Cleanup at the end of the reconciler execution.
-func (r *Reconciler) Cleanup() {
+func (r *Reconciler) Cleanup(completedRecipes []Recipe) {
 	logger.Info("Cleaning up created resources")
 
 	// Delete the completed recipe Jobs
@@ -160,36 +181,38 @@ func (r *Reconciler) Cleanup() {
 		"app":  "euphrosyne",
 		"uuid": r.uuid,
 	}
-	err := r.deleteCompletedJobsWithLabels(labels)
+	err := r.deleteCompletedJobsWithLabels(completedRecipes, labels)
 	if err != nil {
 		logger.Error("Failed to delete completed Jobs", zap.Error(err))
 	}
 }
 
 // Delete completed Kubernetes Jobs with the specified labels.
-func (r *Reconciler) deleteCompletedJobsWithLabels(labels map[string]string) error {
+func (r *Reconciler) deleteCompletedJobsWithLabels(
+	completedRecipes []Recipe, labels map[string]string,
+) error {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
-
-	labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
-	fieldSelector := "status.successful=1"
-
-	logger.Info(
-		"Deleting completed recipe Jobs with the following conditions",
-		zap.String("labelSelector", labelSelector),
-		zap.String("fieldSelector", fieldSelector),
-	)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
 		PropagationPolicy: &propagationPolicy,
 	}
-	listOptions := metav1.ListOptions{
-		LabelSelector: labelSelector,
-		FieldSelector: fieldSelector,
-	}
-	err := jobClient.DeleteCollection(context.TODO(), deleteOptions, listOptions)
-	if err != nil {
-		return err
+
+	for _, recipe := range completedRecipes {
+		labels["recipe"] = recipe.Execution.Name
+		labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
+
+		logger.Info(
+			"Deleting completed recipe Job with the following labels",
+			zap.String("labelSelector", labelSelector),
+		)
+		err := jobClient.DeleteCollection(
+			context.TODO(), deleteOptions, metav1.ListOptions{LabelSelector: labelSelector},
+		)
+		if err != nil {
+
+			return err
+		}
 	}
 
 	return nil

@@ -31,7 +31,7 @@ func handleWebhook(c *gin.Context) {
 	logger.Info("Alert received", zap.Any("alert", alertData))
 
 	// Start the recipe executor
-	go startRecipeExecutor(c, &alertData)
+	go StartRecipeExecutor(c, &alertData)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Alert received and processed"})
 }
