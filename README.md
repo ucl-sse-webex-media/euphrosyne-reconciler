@@ -5,6 +5,12 @@
 In order to setup the Euphrosyne Reconciler you will need a working Kubernetes cluster and
 `kubectl` configured to communicate with the API Server. An easy way to get started is `microk8s`.
 
+Create kubernetes secrets
+```bash
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-credentials=bambooliulala@gmail.com:ATATT3xFfGF0Ofo12ijF8Js4pmEnX7pDp-FcpEhIawOAqxgR7NmYOgGn1EYe_7G_-44bdEGLQ3RsLrgpq59jC0W0xqz0gCLOSpz4AmXLN_M3md_JptK-amGAjyz7rH7idqZIDZFZTUPKcaUlmnHOiG4CwpssqafHXNhEZJBA2995D3-8X-wohvc=7894AA6C
+```
+
 To apply the Kubernetes manifests responsible for setting up the Reconciler on Kubernetes, run the
 following (recursively applying all YAML files inside the `manifests` directory):
 

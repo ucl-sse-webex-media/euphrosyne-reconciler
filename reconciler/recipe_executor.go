@@ -108,6 +108,20 @@ func createJob(
 								"-c",
 								buildRecipeCommand(recipe.Config, config, alertData),
 							},
+							// Add the environment variable from the Secret
+                            Env: []corev1.EnvVar{
+								{
+									Name: "JIRA_CREDENTIALS",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "jira-credentials",
+										},
+									},
+								},
+							},
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
