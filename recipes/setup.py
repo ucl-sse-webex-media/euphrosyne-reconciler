@@ -15,4 +15,16 @@ setup(
             "http-errors = scripts.http_errors:main",
         ],
     },
+    extras_require={
+        "dev": [
+            "black",
+            "codespell",
+            "flake8",
+            "flake8-builtins",
+            "flake8-copyright",
+            "isort",
+            "pep8-naming",
+            "pyproject-flake8",
+        ],
+    },
 )
