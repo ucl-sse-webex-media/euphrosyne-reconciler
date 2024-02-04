@@ -71,7 +71,7 @@ func initLogger() {
 	}
 
 	logger = zap.Must(config.Build())
-	logger.Sync()
+	_ = logger.Sync()
 }
 
 func getHTTPClient() *http.Client {
@@ -107,5 +107,5 @@ func main() {
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
-	logger.Sync()
+	_ = logger.Sync()
 }
