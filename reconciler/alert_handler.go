@@ -50,10 +50,11 @@ func handleStatusRequest(c *gin.Context) {
 	// Log the alert data
 	logger.Info("Status Request received", zap.Any("request", requestData))
 
-	// Start the recipe executor
-	//Create a new reconciler that returns the status
+	//Create a status  reconciler that returns the status
+	var requestType RequestType = StatusRequest
+	BotHandler(requestType, &requestData)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Alert received and processed"})
+	c.JSON(http.StatusOK, gin.H{"message": "Status Request received and processed"})
 }
 
 func handleActionResponse(c *gin.Context) {
@@ -68,7 +69,8 @@ func handleActionResponse(c *gin.Context) {
 
 	// Log the alert data
 	logger.Info("Action response received", zap.Any("request", actionResponseData))
-
-	// Start the recipe executor
-	//Create a new reconciler that returns the runs a new reconciler to run the actions
+	//Create action reconciler  to run the actions
+	var requestType RequestType = ActionResponse
+	BotHandler(requestType, &actionResponseData)
+	c.JSON(http.StatusOK, gin.H{"message": "Response Request received and processed"})
 }
