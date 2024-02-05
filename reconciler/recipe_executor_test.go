@@ -105,7 +105,7 @@ func init() {
 	configMapName = testConfigMapName
 	jobNamespace = testJobNamespace
 	var err error
-	clientset, err = initialiseKubernetesClient()
+	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
 		panic(err)
 	}
@@ -119,6 +119,7 @@ func init() {
 	c, _ = gin.CreateTestContext(w)
 
 	// make sure redis is started
+	redisAddress = "localhost:6379"
 	connectRedis()
 }
 

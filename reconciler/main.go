@@ -21,12 +21,19 @@ var (
 	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
-	redisAddress string = "localhost:6379"
+	redisAddress string 
 	webexBotAddress string
 	recipeTimeout   int
 )
 
 func parseConfig() {
+	flag.StringVar(
+		&redisAddress,
+		"redis-address",
+		os.Getenv("REDIS_ADDRESS"),
+		"Redis address",
+	)
+
 	flag.StringVar(
 		&webexBotAddress,
 		"webex-bot-address",
@@ -72,8 +79,7 @@ func initLogger() {
 	}
 
 	logger = zap.Must(config.Build())
-	logger.Sync()
-
+	_ = logger.Sync()
 }
 
 func getHTTPClient() *http.Client {
@@ -110,18 +116,15 @@ func main() {
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
 	var err error
-	clientset, err = initialiseKubernetesClient()
+	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
 	}
 
-	go startAlertHandler()
+	go StartAlertHandler()
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
-	err = logger.Sync()
-	if err != nil {
-		panic(err)
-	}
+	_ = logger.Sync()
 }

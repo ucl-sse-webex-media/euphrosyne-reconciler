@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func startAlertHandler() {
+func StartAlertHandler() {
 	router := gin.Default()
 	router.POST("/webhook", func(ctx *gin.Context) { handleWebhook(ctx) })
 
