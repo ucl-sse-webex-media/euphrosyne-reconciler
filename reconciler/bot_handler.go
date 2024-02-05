@@ -41,6 +41,7 @@ type ActionReconciler struct {
 	analysis string
 }
 
+// Handles the bot request based on type responseAction or statusRequest
 func BotHandler(requestType RequestType, message *map[string]interface{}) {
 
 	if requestType == StatusRequest {
@@ -49,12 +50,16 @@ func BotHandler(requestType RequestType, message *map[string]interface{}) {
 			logger.Error("Failed to create request reconciler", zap.Error(err))
 			return
 		}
-		allJobStatuses, err := statusReconciler.sendJobStatus()
+		allJobStatuses, err := statusReconciler.getJobStatus()
 		if err != nil {
 			logger.Error("Failed to send Job status ", zap.Error(err))
+			return
 		}
-		statusReconciler.postStatusToWebexBot(allJobStatuses)
-
+		err = statusReconciler.postStatusToWebexBot(allJobStatuses)
+		if err != nil {
+			logger.Error("Failed to send Job Status to WebexBot", zap.Error(err))
+			return
+		}
 	} else if requestType == ActionResponse {
 		reconciler, err := newActionReconciler(message)
 		if err != nil {
@@ -63,12 +68,14 @@ func BotHandler(requestType RequestType, message *map[string]interface{}) {
 		}
 		err = reconciler.performActions()
 		if err != nil {
-			logger.Error("Failed to send Job status ", zap.Error(err))
+			logger.Error("Failed to perform action on bot response", zap.Error(err))
+			return
 		}
 	}
 
 }
 
+// Creates new status reconciler to handle statusRequest
 func newStatusReconciler(requestData *map[string]interface{}) (*StatusReconciler, error) {
 	//Returns a reconiler to handle bot request to show status of the recipes
 	uuid := (*requestData)["uuid"].(string)
@@ -77,7 +84,8 @@ func newStatusReconciler(requestData *map[string]interface{}) (*StatusReconciler
 	}, nil
 }
 
-func (r *StatusReconciler) sendJobStatus() ([]JobStatus, error) {
+// Gets the job status
+func (r *StatusReconciler) getJobStatus() ([]JobStatus, error) {
 	jobClient, err := clientset.BatchV1().Jobs("default").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		logger.Error("Failed to get clienset form K8", zap.Error(err))
@@ -102,11 +110,12 @@ func (r *StatusReconciler) sendJobStatus() ([]JobStatus, error) {
 		}
 		allJobStatuses = append(allJobStatuses, jobStatus)
 	}
+	logger.Info("All Job Statuses", zap.Any("statuses", allJobStatuses))
 
 	return allJobStatuses, nil
 }
 
-// Post message to Webex Bot.
+// Post status message to Webex Bot.
 func (r *StatusReconciler) postStatusToWebexBot(message []JobStatus) error {
 	// Convert the messages to JSON
 	jsonData, err := json.Marshal(message)
@@ -131,6 +140,7 @@ func (r *StatusReconciler) postStatusToWebexBot(message []JobStatus) error {
 
 }
 
+// Creates new reconciler to handle responseAction
 func newActionReconciler(responseData *map[string]interface{}) (*ActionReconciler, error) {
 	uuid := (*responseData)["uuid"].(string)
 	actions := (*responseData)["actions"].(string)
@@ -141,6 +151,9 @@ func newActionReconciler(responseData *map[string]interface{}) (*ActionReconcile
 		analysis: analysis,
 	}, nil
 }
+
+// Runs jobs to perform action
 func (r *ActionReconciler) performActions() error {
+	logger.Info("Performing actions based on the response")
 	return nil
 }
