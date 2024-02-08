@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -13,13 +14,14 @@ import (
 
 const (
 	testConfigMapName = "orpheus-operator-recipes-test"
-	testNamespace     = "orpheus-test" // use a test namespace
+	testNamespace     = "orpheus-test"
 	testJobNamespace  = "orpheus-test"
+	imageName         = "maikeee32e/euphrosyne-recipes-test:latest"
 )
 
 var recipe_1 = Recipe{
-	Config:&RecipeConfig{
-		Image:      "maikeee32e/euphrosyne-recipes-test:latest",
+	Config: &RecipeConfig{
+		Image:      imageName,
 		Entrypoint: "test-1-recipe",
 		Params: []struct {
 			Name  string `yaml:"name"`
@@ -32,7 +34,7 @@ var recipe_1 = Recipe{
 
 var recipe_2 = Recipe{
 	Config: &RecipeConfig{
-		Image:      "maikeee32e/euphrosyne-recipes-test:latest",
+		Image:      imageName,
 		Entrypoint: "test-2-recipe",
 		Params: []struct {
 			Name  string `yaml:"name"`
@@ -43,19 +45,25 @@ var recipe_2 = Recipe{
 	},
 }
 
-// just the literal defination, did not define the real recipe for test
-var configMap = map[string]string{
-	"test-1-recipe": `image: "maikeee32e/euphrosyne-recipes-test:latest"
+var recipe_1_config = fmt.Sprintf(`
+image: "%s"
 entrypoint: "test-1-recipe"
 params:
 - name: "data"
-  value: "dummy"`,
+  value: "dummy"
+`, imageName)
 
-	"test-2-recipe": `image: "maikeee32e/euphrosyne-recipes-test:latest"
+var recipe_2_config = fmt.Sprintf(`
+image: "%s"
 entrypoint: "test-2-recipe"
 params:
 - name: "data"
-  value: "dummy"`,
+  value: "dummy"
+`, imageName)
+
+var configMap = map[string]string{
+	"test-1-recipe": recipe_1_config,
+	"test-2-recipe": recipe_2_config,
 }
 
 var alertData = &map[string]interface{}{
@@ -70,7 +78,9 @@ func createTestNamespace() {
 			Name: testNamespace,
 		},
 	}
-	_, err := clientset.CoreV1().Namespaces().Create(context.TODO(), testNamespace, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Namespaces().Create(
+		context.TODO(), testNamespace, metav1.CreateOptions{},
+	)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -84,7 +94,9 @@ func createTestConfigmap(cMap map[string]string) error {
 		},
 		Data: cMap,
 	}
-	_, err := clientset.CoreV1().ConfigMaps(testNamespace).Create(context.TODO(), configMapObj, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().ConfigMaps(testNamespace).Create(
+		context.TODO(), configMapObj, metav1.CreateOptions{},
+	)
 	if err != nil {
 		return err
 	}
@@ -92,7 +104,9 @@ func createTestConfigmap(cMap map[string]string) error {
 }
 
 func deleteTestConfigmap() {
-	err := clientset.CoreV1().ConfigMaps(testNamespace).Delete(context.TODO(), testConfigMapName, metav1.DeleteOptions{})
+	err := clientset.CoreV1().ConfigMaps(testNamespace).Delete(
+		context.TODO(), testConfigMapName, metav1.DeleteOptions{},
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -110,7 +124,9 @@ func init() {
 		panic(err)
 	}
 	// check whether the test namespace exists
-	_, err = clientset.CoreV1().Namespaces().Get(context.TODO(), testNamespace, metav1.GetOptions{})
+	_, err = clientset.CoreV1().Namespaces().Get(
+		context.TODO(), testNamespace, metav1.GetOptions{},
+	)
 	if err != nil {
 		createTestNamespace()
 	}
@@ -118,12 +134,12 @@ func init() {
 	w := httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 
-	// make sure redis is started
+	// make sure redis is running
 	redisAddress = "localhost:6379"
 	connectRedis()
 }
 
-// unit test
+// Test that the recipe executor can retrieve recipes from the ConfigMap.
 func Test_GetRecipeConfig(t *testing.T) {
 	defer deleteTestConfigmap()
 
@@ -143,13 +159,18 @@ func Test_GetRecipeConfig(t *testing.T) {
 	assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
 }
 
+// Test that the recipe executor can create a Job for the provided alert data.
 func Test_CreateJob(t *testing.T) {
 	job, err := createJob("test-1-recipe", recipe_1, alertData)
 	assert.NotNil(t, job)
 	assert.Nil(t, err)
-	getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})
+	getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(
+		context.TODO(), job.Name, metav1.GetOptions{},
+	)
 	assert.NotNil(t, getJob)
 	assert.Nil(t, err)
-	err = clientset.BatchV1().Jobs(testNamespace).Delete(context.TODO(), job.Name, metav1.DeleteOptions{})
+	err = clientset.BatchV1().Jobs(testNamespace).Delete(
+		context.TODO(), job.Name, metav1.DeleteOptions{},
+	)
 	assert.Nil(t, err)
 }

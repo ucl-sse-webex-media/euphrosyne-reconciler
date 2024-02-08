@@ -13,13 +13,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// unit test
+// Test that the reconciler can collect the results of completed recipes from Redis.
 func Test_CollectRecipeResult(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	recipeTimeout = 2
-	
-	// simulate that there are 2 recipes
+
+	// simulate 2 recipes
 	testRecipeMap := map[string]Recipe{
 		"test-1-recipe": recipe_1,
 		"test-2-recipe": recipe_2,
@@ -31,7 +31,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
-	// two recipe works normally
+	// test that successful recipes are detected and their results are collected
 	go func() {
 		defer wg.Done()
 		time.Sleep(time.Second)
@@ -50,7 +50,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 	assert.Equal(t, 2, len(completedRecipes))
 	wg.Wait()
 
-	// 1 recipe timeout
+	// test that the reconciler can handle a recipe that times out
 	wg.Add(2)
 	r, err = NewAlertReconciler(c, alertData, testRecipeMap)
 	assert.NotNil(t, r)
@@ -72,15 +72,16 @@ func Test_CollectRecipeResult(t *testing.T) {
 	wg.Wait()
 }
 
+// Test that created resources are cleaned up successfully.
 func Test_Cleanup(t *testing.T) {
-	// an easy job that must run successfully
+	// a Job that is expected to run successfully
 	jobObj := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test-job-",
 			Labels: map[string]string{
-				"app":     "euphrosyne",
+				"app":    "euphrosyne",
 				"recipe": "test-job",
-				"uuid":    (*alertData)["uuid"].(string),
+				"uuid":   (*alertData)["uuid"].(string),
 			},
 			Namespace: jobNamespace,
 		},
@@ -88,9 +89,9 @@ func Test_Cleanup(t *testing.T) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":     "euphrosyne",
+						"app":    "euphrosyne",
 						"recipe": "test-job",
-						"uuid":    (*alertData)["uuid"].(string),
+						"uuid":   (*alertData)["uuid"].(string),
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -107,7 +108,18 @@ func Test_Cleanup(t *testing.T) {
 		},
 	}
 
-	completedRecipe := Recipe{Execution: &struct{Name string "json:\"name\""; Incident string "json:\"incident\""; Status string "json:\"status\""; Results struct{Analysis string "json:\"analysis\""; JSON string "json:\"json\""; Links []string "json:\"links\""} "json:\"results\""}{Name: "test-job"}}
+	completedRecipe := Recipe{
+		Execution: &struct {
+			Name     string "json:\"name\""
+			Incident string "json:\"incident\""
+			Status   string "json:\"status\""
+			Results  struct {
+				Analysis string   "json:\"analysis\""
+				JSON     string   "json:\"json\""
+				Links    []string "json:\"links\""
+			} "json:\"results\""
+		}{Name: "test-job"},
+	}
 	completedRecipes := []Recipe{
 		completedRecipe,
 	}
@@ -115,17 +127,23 @@ func Test_Cleanup(t *testing.T) {
 	r, err := NewAlertReconciler(c, alertData, nil)
 	assert.Nil(t, err)
 
-	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(context.TODO(), jobObj, metav1.CreateOptions{})
+	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(
+		context.TODO(), jobObj, metav1.CreateOptions{},
+	)
 	assert.NotNil(t, job)
 	assert.Nil(t, err)
 
 	for {
-		getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})
+		getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(
+			context.TODO(), job.Name, metav1.GetOptions{},
+		)
 		assert.NotNil(t, getJob)
 		assert.Nil(t, err)
 		if getJob.Status.Succeeded > 0 {
 			r.Cleanup(completedRecipes)
-			getJob, err = clientset.BatchV1().Jobs(testNamespace).Get(context.TODO(), job.Name, metav1.GetOptions{})
+			getJob, err = clientset.BatchV1().Jobs(testNamespace).Get(
+				context.TODO(), job.Name, metav1.GetOptions{},
+			)
 			assert.Equal(t, true, errors.IsNotFound(err))
 			assert.Equal(t, "", getJob.Name)
 			break

@@ -17,11 +17,11 @@ import (
 )
 
 var (
-	clientset *kubernetes.Clientset
-	httpc     *http.Client
-	rdb       *redis.Client
-	logger    *zap.Logger
-	redisAddress string 
+	clientset       *kubernetes.Clientset
+	httpc           *http.Client
+	rdb             *redis.Client
+	logger          *zap.Logger
+	redisAddress    string
 	webexBotAddress string
 	recipeTimeout   int
 )
@@ -90,17 +90,17 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func connectRedis(){
+func connectRedis() {
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
 	_, err := rdb.Ping(context.Background()).Result()
-    if err != nil {
+	if err != nil {
 		panic(err)
-    }
-	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
+	}
+	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
 }
 
 func main() {

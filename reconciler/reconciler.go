@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Reconciler struct
 type Reconciler struct {
 	uuid      string
 	alertData *map[string]interface{}
@@ -47,13 +46,11 @@ func NewAlertReconciler(
 }
 
 // Run the reconciler to monitor the subscribed Redis channel for the outcome of each recipe.
-func (r *Reconciler) Run() {	
-	// Collect recipe result
-	completedRecipes,_ := collectRecipeResult(r)
-
-	defer func() {
-		r.Cleanup(completedRecipes)
-	}()
+func (r *Reconciler) Run() {
+	completedRecipes, err := collectRecipeResult(r)
+	if err != nil {
+		logger.Error("Failed to collect recipe results", zap.Error(err))
+	}
 
 	// Send received messages to Webex Bot
 	botMessage := IncidentBotMessage{
@@ -61,27 +58,33 @@ func (r *Reconciler) Run() {
 		Analysis: r.getIncidentAnalysis(completedRecipes),
 		Actions:  "",
 	}
-	err := r.postMessageToWebexBot(botMessage)
+	err = r.postMessageToWebexBot(botMessage)
 	if err != nil {
 		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
 		// FIXME: Handle the error as needed
 	}
 }
 
-func collectRecipeResult(r *Reconciler) ([]Recipe,error) {
+func collectRecipeResult(r *Reconciler) ([]Recipe, error) {
 	var completedRecipes []Recipe
+	defer func() {
+		r.Cleanup(completedRecipes)
+	}()
 	ch := r.pubsub.Channel()
+
 	messageCount := 0
+
 	timeoutDuration := time.Duration(recipeTimeout) * time.Second
 	timeout := time.NewTimer(timeoutDuration)
 	shouldBreak := false
+
 	for {
 		select {
 		case msg := <-ch:
 			// Parse the recipe results from the Redis message
 			recipe, err := r.parseRecipeResults(msg.Payload)
-			
-			if err != nil{
+
+			if err != nil {
 				logger.Error("Failed to parse recipe results", zap.Error(err))
 			}
 			logger.Info(
@@ -92,6 +95,7 @@ func collectRecipeResult(r *Reconciler) ([]Recipe,error) {
 			// Update the Reconciler recipe with the execution results
 			recipe.Config = r.recipes[recipe.Execution.Name].Config
 			r.recipes[recipe.Execution.Name] = recipe
+
 			completedRecipes = append(completedRecipes, recipe)
 			messageCount++
 			if messageCount == len(r.recipes) {
@@ -116,9 +120,10 @@ func collectRecipeResult(r *Reconciler) ([]Recipe,error) {
 	err := r.pubsub.Close()
 	if err != nil {
 		logger.Error("Failed to close channel", zap.Error(err))
-		return nil,err
+		return nil, err
 	}
-	return completedRecipes,nil
+
+	return completedRecipes, nil
 }
 
 // Aggregate the results of all recipes.
