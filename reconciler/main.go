@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"net/http"
@@ -16,16 +17,23 @@ import (
 )
 
 var (
-	clientset *kubernetes.Clientset
-	httpc     *http.Client
-	rdb       *redis.Client
-	logger    *zap.Logger
-
+	clientset       *kubernetes.Clientset
+	httpc           *http.Client
+	rdb             *redis.Client
+	logger          *zap.Logger
+	redisAddress    string
 	webexBotAddress string
 	recipeTimeout   int
 )
 
-func init() {
+func parseConfig() {
+	flag.StringVar(
+		&redisAddress,
+		"redis-address",
+		os.Getenv("REDIS_ADDRESS"),
+		"Redis address",
+	)
+
 	flag.StringVar(
 		&webexBotAddress,
 		"webex-bot-address",
@@ -82,15 +90,26 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func main() {
-	httpc = getHTTPClient()
+func connectRedis() {
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     "euphrosyne-reconciler-redis.default.svc.cluster.local:80",
+		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
+	_, err := rdb.Ping(context.Background()).Result()
+	if err != nil {
+		panic(err)
+	}
+	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+}
+
+func main() {
+	parseConfig()
+	httpc = getHTTPClient()
 
 	initLogger()
+
+	connectRedis()
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)

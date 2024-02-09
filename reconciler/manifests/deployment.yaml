@@ -25,6 +25,8 @@ spec:
           args:
             - --webex-bot-address
             - https://eurydice-webex-bot.onrender.com
+            - --redis-address
+            - euphrosyne-reconciler-redis.default.svc.cluster.local:80
             - --recipe-timeout
             - "300"
           ports:
