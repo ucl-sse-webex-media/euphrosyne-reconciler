@@ -104,6 +104,7 @@ func main() {
 	}
 
 	go StartAlertHandler()
+	go StartServer()
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
