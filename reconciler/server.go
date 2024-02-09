@@ -8,106 +8,87 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RequestType is an enum-like type for different types of requests
-type RequestType int
-
-const (
-	// StatusRequest represents the status request type
-	StatusRequest RequestType = iota + 1
-
-	// ActionResponse represents the action response type
-	ActionResponse
-)
-
 type JobStatus struct {
-	Name      string            `json:"name"`
-	StartTime string            `json:"startTime"`
-	Status    string            `json:"status"`
-	Labels    map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	StartTime   string            `json:"startTime"`
+	Status      string            `json:"status"`
+	Labels      map[string]string `json:"labels"`
+	Description string            `json:"description"`
 }
 
-type StatusReconciler struct {
-	uuid string
+func StartServer() {
+	router := gin.Default()
+	router.POST("/statusRequest", func(ctx *gin.Context) { handleStatusRequest(ctx) })
+	router.POST("/actionResponse", func(ctx *gin.Context) { handleActionResponse(ctx) })
+	if err := router.Run(":8081"); err != nil {
+		logger.Error("Failed to start server", zap.Error(err))
+	}
 }
 
-type ActionReconciler struct {
-	uuid     string
-	actions  string
-	analysis string
-}
+// handles request from WebEx bot for execution status of the recipe
+func handleStatusRequest(c *gin.Context) {
 
-// Handles the bot request based on type responseAction or statusRequest
-func BotHandler(requestType RequestType, message *map[string]interface{}) {
+	var message map[string]interface{}
 
-	if requestType == StatusRequest {
-		statusReconciler, err := newStatusReconciler(message)
-		if err != nil {
-			logger.Error("Failed to create request reconciler", zap.Error(err))
-			return
-		}
-		allJobStatuses, err := statusReconciler.getJobStatus()
-		if err != nil {
-			logger.Error("Failed to send Job status ", zap.Error(err))
-			return
-		}
-		err = statusReconciler.postStatusToWebexBot(allJobStatuses)
-		if err != nil {
-			logger.Error("Failed to send Job Status to WebexBot", zap.Error(err))
-			return
-		}
-	} else if requestType == ActionResponse {
-		reconciler, err := newActionReconciler(message)
-		if err != nil {
-			logger.Error("Failed to create action reconciler", zap.Error(err))
-			return
-		}
-		err = reconciler.performActions()
-		if err != nil {
-			logger.Error("Failed to perform action on bot response", zap.Error(err))
-			return
-		}
+	if err := c.BindJSON(&message); err != nil {
+		logger.Error("Failed to parse JSON", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON for Action response"})
+		return
 	}
 
-}
+	// Log the alert data
+	logger.Info("Status Request received", zap.Any("request", message))
 
-// Creates new status reconciler to handle statusRequest
-func newStatusReconciler(requestData *map[string]interface{}) (*StatusReconciler, error) {
-	//Returns a reconiler to handle bot request to show status of the recipes
-	uuid := (*requestData)["uuid"].(string)
-	return &StatusReconciler{
-		uuid: uuid,
-	}, nil
+	// var requestType RequestType = StatusRequest
+	// handleRequest(requestType, &requestData)
+	var jobStatuses []JobStatus
+	jobStatuses, err := getJobStatus(&message)
+	if err != nil {
+		logger.Error("Error Getting Job Status", zap.Error(err))
+	}
+	postStatusToWebexBot(jobStatuses)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Status Request received and processed"})
 }
 
 // Gets the job status
-func (r *StatusReconciler) getJobStatus() ([]JobStatus, error) {
-	jobClient, err := clientset.BatchV1().Jobs("default").List(context.TODO(), metav1.ListOptions{})
+func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
+	jobList, err := clientset.BatchV1().Jobs(jobNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		logger.Error("Failed to get clienset form K8", zap.Error(err))
 		return nil, err
 	}
 
+	uuid := (*message)["uuid"]
+	fmt.Printf(uuid.(string))
+
 	var allJobStatuses []JobStatus
 
-	for _, job := range jobClient.Items {
-		jobStatus := JobStatus{
-			Name:      job.Name,
-			StartTime: job.CreationTimestamp.Time.Format(time.RFC3339),
-			Labels:    job.Labels,
+	for _, job := range jobList.Items {
+		var jobStatus JobStatus
+		if value, ok := job.Labels["uuid"]; ok && value == uuid {
+			jobStatus = JobStatus{
+				Name:      job.Name,
+				StartTime: job.CreationTimestamp.Time.Format(time.RFC3339),
+				Labels:    job.Labels,
+				//Get description of recipe from  from Configmap
+				Description: "Hi! I am the description for the recipe",
+			}
+			if job.Status.Active > 0 {
+				jobStatus.Status = "Active"
+			} else if job.Status.Succeeded > 0 {
+				jobStatus.Status = "Completed"
+			} else if job.Status.Failed > 0 {
+				jobStatus.Status = "Failed"
+			}
+
 		}
 
-		if job.Status.Active > 0 {
-			jobStatus.Status = "Active"
-		} else if job.Status.Succeeded > 0 {
-			jobStatus.Status = "Completed"
-		} else if job.Status.Failed > 0 {
-			jobStatus.Status = "Failed"
-		}
 		allJobStatuses = append(allJobStatuses, jobStatus)
 	}
 	logger.Info("All Job Statuses", zap.Any("statuses", allJobStatuses))
@@ -116,7 +97,7 @@ func (r *StatusReconciler) getJobStatus() ([]JobStatus, error) {
 }
 
 // Post status message to Webex Bot.
-func (r *StatusReconciler) postStatusToWebexBot(message []JobStatus) error {
+func postStatusToWebexBot(message []JobStatus) error {
 	// Convert the messages to JSON
 	jsonData, err := json.Marshal(message)
 	if err != nil {
@@ -124,7 +105,7 @@ func (r *StatusReconciler) postStatusToWebexBot(message []JobStatus) error {
 	}
 
 	// Send the POST request
-	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
+	url := fmt.Sprintf("%s/api/actions", webexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -140,20 +121,48 @@ func (r *StatusReconciler) postStatusToWebexBot(message []JobStatus) error {
 
 }
 
-// Creates new reconciler to handle responseAction
-func newActionReconciler(responseData *map[string]interface{}) (*ActionReconciler, error) {
-	uuid := (*responseData)["uuid"].(string)
-	actions := (*responseData)["actions"].(string)
-	analysis := (*responseData)["analysis"].(string)
-	return &ActionReconciler{
-		uuid:     uuid,
-		actions:  actions,
-		analysis: analysis,
-	}, nil
+//-------------------------------------------------------------
+
+// handles response from WebEx Bot to execute actions
+func handleActionResponse(c *gin.Context) {
+
+	var message map[string]interface{}
+
+	if err := c.BindJSON(&message); err != nil {
+		logger.Error("Failed to parse JSON", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON for Action response"})
+		return
+	}
+
+	// Log the alert data
+	logger.Info("Action response received", zap.Any("request", message))
+	//Perform the action
+	err := executeActions(&message)
+	if err != nil {
+		logger.Error("Failed to execute mitigation recipe", zap.Error(err))
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Response Request received and processed"})
 }
 
 // Runs jobs to perform action
-func (r *ActionReconciler) performActions() error {
+func executeActions(message *map[string]interface{}) error {
 	logger.Info("Performing actions based on the response")
+	recipes, err := getRecipesFromConfigMap()
+	if err != nil {
+		logger.Error("Failed to retrieve recipes from ConfigMap", zap.Error(err))
+		return err
+	}
+	// Create a Job for each recipe
+	for recipeName, recipe := range recipes {
+		//FIXME:createJob works with alertData and not message data from the WebExBot
+		_, err := createJob(recipeName, recipe, message)
+		if err != nil {
+			logger.Error("Failed to create K8s Job", zap.Error(err))
+			return err
+			// FIXME: Handle the error as needed
+
+		}
+	}
 	return nil
 }
