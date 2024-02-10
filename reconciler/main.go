@@ -26,7 +26,7 @@ var (
 )
 
 func parseConfig() {
-	// config priority: config.go < env variables < command line 
+	// config priority: config.go < env variables < command line
 	flag.StringVar(
 		&redisAddress,
 		"redis-address",
