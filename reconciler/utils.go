@@ -42,16 +42,16 @@ func InitialiseKubernetesClient() (*kubernetes.Clientset, error) {
 }
 
 // load local environment variables
-func loadEnvVariables(){
-	if os.Getenv("REDIS_ADDRESS")!=""{
+func loadEnvVariables() {
+	if os.Getenv("REDIS_ADDRESS") != "" {
 		redisAddress = os.Getenv("REDIS_ADDRESS")
 	}
 
-	if os.Getenv("WEBEX_BOT_ADDRESS")!=""{
+	if os.Getenv("WEBEX_BOT_ADDRESS") != "" {
 		webexBotAddress = os.Getenv("WEBEX_BOT_ADDRESS")
 	}
 
-	if os.Getenv("RECIPE_TIMEOUT")!=""{
-		recipeTimeout,_ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
+	if os.Getenv("RECIPE_TIMEOUT") != "" {
+		recipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
 	}
 }

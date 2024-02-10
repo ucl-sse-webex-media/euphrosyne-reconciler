@@ -9,3 +9,9 @@ data:
     params:
       - name: "data"
         value: "dummy"
+  http-errors: |
+    image: "phoevos/euphrosyne-recipes:latest"
+    entrypoint: "http-errors"
+    params:
+      - name: "data"
+        value: "dummy"

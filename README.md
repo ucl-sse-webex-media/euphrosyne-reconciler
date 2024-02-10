@@ -18,7 +18,7 @@ You will also need to apply the ConfigMap containing the list of available recip
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
 
-To access redis locally, run:
+To run redis locally:
 
 ```
 kubectl port-forward service/euphrosyne-reconciler-redis 6379:80
@@ -31,7 +31,7 @@ cd reconciler
 go run .
 ```
 
-Default configuration set in config.go file used for local dev.
+Default configuration is in config.go file and used for local dev.
 
 #### Executing a recipe locally
 

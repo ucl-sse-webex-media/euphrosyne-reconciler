@@ -16,16 +16,17 @@ import (
 )
 
 var (
-	clientset *kubernetes.Clientset
-	httpc     *http.Client
-	rdb       *redis.Client
-	logger    *zap.Logger
-	redisAddress string = RedisAddress
+	clientset       *kubernetes.Clientset
+	httpc           *http.Client
+	rdb             *redis.Client
+	logger          *zap.Logger
+	redisAddress    string = RedisAddress
 	webexBotAddress string = WebexBotAddress
-	recipeTimeout   int = RecipeTimeout
+	recipeTimeout   int    = RecipeTimeout
 )
 
-func init() {
+func parseConfig() {
+	// config priority: config.go < env variables < command line 
 	flag.StringVar(
 		&redisAddress,
 		"redis-address",
@@ -48,7 +49,7 @@ func init() {
 	)
 
 	loadEnvVariables()
-	
+
 	flag.Parse()
 }
 
@@ -77,7 +78,7 @@ func initLogger() {
 	}
 
 	logger = zap.Must(config.Build())
-	logger.Sync()
+	_ = logger.Sync()
 }
 
 func getHTTPClient() *http.Client {
@@ -88,24 +89,32 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func main() {
-	httpc = getHTTPClient()
-
-	initLogger()
-
+func connectRedis() {
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
+	_, err := rdb.Ping(context.Background()).Result()
+	if err != nil {
+		panic(err)
+	}
+	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+}
+
+func main() {
+	parseConfig()
+	httpc = getHTTPClient()
 
 	var err error
 	_, err = rdb.Ping(context.Background()).Result()
-    if err != nil {
+	if err != nil {
 		logger.Error("Failed to connect to redis", zap.Error(err))
-        return
-    }
-	logger.Info("Redis connected successfully", zap.String("redisAddress",redisAddress))
+		return
+	}
+	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+
+	connectRedis()
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
@@ -121,5 +130,5 @@ func main() {
 
 	<-shutdownChan
 	logger.Info("Shutting down...")
-	logger.Sync()
+	_ = logger.Sync()
 }
