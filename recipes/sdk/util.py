@@ -1,5 +1,6 @@
 import argparse
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
     parser.add_argument("--data", type=str, help="Aggregator data")

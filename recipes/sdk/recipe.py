@@ -114,13 +114,17 @@ class Recipe:
             self.redisClient = redis.Redis(redis_address["host"], redis_address["port"])
             self.redisClient.ping()
         except redis.ConnectionError:
-            logger.error("Failed to connect to redis at %s:%s",redis_address["host"], redis_address["port"])
-                  
+            logger.error(
+                "Failed to connect to redis at %s:%s", redis_address["host"], redis_address["port"]
+            )
+
     def _parse_redis_address(self):
-        redis_address = self.parsed_args.redis_address if self.parsed_args.redis_address else REDIS_ADDRESS
+        redis_address = (
+            self.parsed_args.redis_address if self.parsed_args.redis_address else REDIS_ADDRESS
+        )
         split_address = redis_address.split(":")
-        return {"host":split_address[0],"port":split_address[1]}
-        
+        return {"host": split_address[0], "port": split_address[1]}
+
     def parse_input_data(func):
         """A decorator for parsing command-line arguments."""
 

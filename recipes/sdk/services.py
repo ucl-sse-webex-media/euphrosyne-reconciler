@@ -43,7 +43,7 @@ class DataAggregator(HTTPService):
         self.parsed_args = parse_args()
         self.base_url = self._parse_base_url()
         self.sources = {source: f"{self.base_url}/api/sources/{source}" for source in self.SOURCES}
-    
+
     def _parse_base_url(self):
         if self.parsed_args.aggregator_base_url:
             return self.parsed_args.aggregator_base_url
