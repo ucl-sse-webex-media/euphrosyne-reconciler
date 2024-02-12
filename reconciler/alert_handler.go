@@ -11,8 +11,6 @@ import (
 func StartAlertHandler() {
 	router := gin.Default()
 	router.POST("/webhook", func(ctx *gin.Context) { handleWebhook(ctx) })
-	router.POST("/statusRequest", func(ctx *gin.Context) { handleStatusRequest(ctx) })
-	router.POST("/actionResponse", func(ctx *gin.Context) { handleActionResponse(ctx) })
 	if err := router.Run(":8080"); err != nil {
 		logger.Error("Failed to start server", zap.Error(err))
 	}
