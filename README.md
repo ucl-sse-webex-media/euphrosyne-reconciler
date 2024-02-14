@@ -6,9 +6,13 @@ In order to setup the Euphrosyne Reconciler you will need a working Kubernetes c
 `kubectl` configured to communicate with the API Server. An easy way to get started is `microk8s`.
 
 Create kubernetes secrets
+create two kubernetes secrets, one is `jira-user`, which is the username of jira, another one is 
+token of that user `jira-token`, the last one is url, `jira-url`
+
 ```bash
 kubectl create secret generic euphrosyne-keys \
-  --from-literal=jira-credentials=bambooliulala@gmail.com:ATATT3xFfGF0Ofo12ijF8Js4pmEnX7pDp-FcpEhIawOAqxgR7NmYOgGn1EYe_7G_-44bdEGLQ3RsLrgpq59jC0W0xqz0gCLOSpz4AmXLN_M3md_JptK-amGAjyz7rH7idqZIDZFZTUPKcaUlmnHOiG4CwpssqafHXNhEZJBA2995D3-8X-wohvc=7894AA6C
+  --from-literal=jira-user=jira_username \
+  --from-literal=jira-token=jira_token
 ```
 
 To apply the Kubernetes manifests responsible for setting up the Reconciler on Kubernetes, run the

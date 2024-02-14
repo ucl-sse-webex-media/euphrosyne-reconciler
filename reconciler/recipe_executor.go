@@ -109,19 +109,41 @@ func createJob(
 								buildRecipeCommand(recipe.Config, config, alertData),
 							},
 							// Add the environment variable from the Secret
-                            Env: []corev1.EnvVar{
-								{
-									Name: "JIRA_CREDENTIALS",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "jira-credentials",
-										},
-									},
-								},
-							},
+                            // Env: []corev1.EnvVar{
+							// 	{
+							// 		Name: "JIRA_USER",
+							// 		ValueFrom: &corev1.EnvVarSource{
+							// 			SecretKeyRef: &corev1.SecretKeySelector{
+							// 				LocalObjectReference: corev1.LocalObjectReference{
+							// 					Name: "euphrosyne-keys",
+							// 				},
+							// 				Key: "jira-user",
+							// 			},
+							// 		},
+							// 	},
+							// 	{
+							// 		Name: "JIRA_TOKEN",
+							// 		ValueFrom: &corev1.EnvVarSource{
+							// 			SecretKeyRef: &corev1.SecretKeySelector{
+							// 				LocalObjectReference: corev1.LocalObjectReference{
+							// 					Name: "euphrosyne-keys",
+							// 				},
+							// 				Key: "jira-token",
+							// 			},
+							// 		},
+							// 	},
+							// 	{
+							// 		Name: "JIRA_URL",
+							// 		ValueFrom: &corev1.EnvVarSource{
+							// 			SecretKeyRef: &corev1.SecretKeySelector{
+							// 				LocalObjectReference: corev1.LocalObjectReference{
+							// 					Name: "euphrosyne-keys",
+							// 				},
+							// 				Key: "jira-url",
+							// 			},
+							// 		},
+							// 	},
+							// },
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,

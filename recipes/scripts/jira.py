@@ -1,33 +1,22 @@
 import logging
 import requests
 import json
-import base64
-import os
 
+from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeResults, RecipeStatus
+from sdk.services import Jira
+
 logger = logging.getLogger(__name__)
 
-def handler(data: dict, results: RecipeResults):
-    # email = 'bambooliulala@gmail.com'
-    # token = 'ATATT3xFfGF0Ofo12ijF8Js4pmEnX7pDp-FcpEhIawOAqxgR7NmYOgGn1EYe_7G_-44bdEGLQ3RsLrgpq59jC0W0xqz0gCLOSpz4AmXLN_M3md_JptK-amGAjyz7rH7idqZIDZFZTUPKcaUlmnHOiG4CwpssqafHXNhEZJBA2995D3-8X-wohvc=7894AA6C'
-    # credentials = f'{email}:{token}'
+def handler(incident: Incident, results: RecipeResults):
+    """Create Jira Issue Recipe."""
     logger.info("Create jira ticket")
-    jira_credentials = os.getenv('JIRA_CREDENTIALS')
+    
+    jira = Jira()
+    jira.create_issue(incident.data)
 
-    if jira_credentials is not None:
-        print("JIRA Credentials:", jira_credentials)
-    else:
-        print("JIRA_CREDENTIALS environment variable is not set.")
-        logger.info("JIRA_CREDENTIALS environment variable is not set.")
-    encoded_credentials = base64.b64encode(jira_credentials.encode()).decode()
-
-    url = 'https://bambooliulala.atlassian.net/rest/api/3/issue'
-
-    headers = {
-        'Authorization': f'Basic {encoded_credentials}',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-    }
+    
+    
 
     # fileds: summary, issuetype, parent, description, customfield_10020, project, customfield_10021, 
     # reporter, customfield_10000, labels, customfield_10016, customfield_10019, attachment, issuelinks, assignee
@@ -61,7 +50,6 @@ def handler(data: dict, results: RecipeResults):
         }
     }
 
-    response = requests.post(url, headers=headers, data=json.dumps(data))
     response = requests.post(url, headers=headers, data=json.dumps(data))
     if response.status_code == 200:
         results.log("create jira ticket successfully" + response.text)

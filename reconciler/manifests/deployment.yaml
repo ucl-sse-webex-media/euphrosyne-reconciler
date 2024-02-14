@@ -33,10 +33,4 @@ spec:
             - "300"
           ports:
             - containerPort: 8080
-          env:
-            - name: JIRA_CREDENTIALS
-              valueFrom:
-                secretKeyRef:
-                  name: euphrosyne-keys
-                  key: jira-credentials
       serviceAccountName: euphrosyne-reconciler

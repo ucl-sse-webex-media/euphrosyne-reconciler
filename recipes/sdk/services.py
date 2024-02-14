@@ -1,6 +1,7 @@
 import logging
-
 import requests
+import base64
+import os
 
 from sdk.errors import DataAggregatorHTTPError
 from sdk.incident import Incident
@@ -30,6 +31,44 @@ class HTTPService:
         except requests.exceptions.RequestException as e:
             logger.error(e)
             raise e
+
+
+# class Jira(HTTPService):
+#     """Interface for Jira recipe"""
+#     # secret 
+#     URL = os.getenv('JIRA_URL')
+
+#     def __init__(self, url=None):
+#         super().__init__(url=(url or self.URL))
+    
+#     def get_headers(self):
+#         """Get HTTP headers."""
+#         jira_user = os.getenv('JIRA_USER')
+#         jira_token = os.getenv('JIRA_TOKEN')
+#         jira_credentials = jira_user + ":" + jira_token
+#         encoded_credentials = base64.b64encode(jira_credentials.encode()).decode()
+    
+#         headers = {
+#             'Authorization': f'Basic {encoded_credentials}',
+#             'Accept': 'application/json',
+#             'Content-Type': 'application/json'
+#         }
+#         return headers
+    
+#     #TODO: configuration
+#     #TODO: process error
+#     def post(self, args, **kwargs):
+#         """Send a POST request to Jira Cloud and create new issues"""
+#         res = super().post(args, **kwargs)
+#         return res
+    
+#     #TODO: complete creating issue
+#     def create_issue(data):
+
+
+
+
+
 
 
 class DataAggregator(HTTPService):
