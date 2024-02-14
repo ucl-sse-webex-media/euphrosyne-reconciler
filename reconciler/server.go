@@ -33,25 +33,28 @@ func StartServer() {
 // handles request from WebEx bot for execution status of the recipe
 func handleStatusRequest(c *gin.Context) {
 
-	var message map[string]interface{}
+	var data map[string]interface{}
 
-	if err := c.BindJSON(&message); err != nil {
+	if err := c.BindJSON(&data); err != nil {
 		logger.Error("Failed to parse JSON", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON for Action response"})
 		return
 	}
 
 	// Log the alert data
-	logger.Info("Status Request received", zap.Any("request", message))
+	logger.Info("Status Request received", zap.Any("request", data))
 
 	// var requestType RequestType = StatusRequest
 	// handleRequest(requestType, &requestData)
 	var jobStatuses []JobStatus
-	jobStatuses, err := getJobStatus(&message)
+	jobStatuses, err := getJobStatus(&data)
 	if err != nil {
 		logger.Error("Error Getting Job Status", zap.Error(err))
 	}
-	postStatusToWebexBot(jobStatuses)
+	err = postStatusToWebexBot(jobStatuses)
+	if err != nil {
+		logger.Error("Failed to send status to Bot", zap.Error(err))
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Status Request received and processed"})
 }
@@ -126,43 +129,19 @@ func postStatusToWebexBot(message []JobStatus) error {
 // handles response from WebEx Bot to execute actions
 func handleActionResponse(c *gin.Context) {
 
-	var message map[string]interface{}
+	var data map[string]interface{}
 
-	if err := c.BindJSON(&message); err != nil {
+	if err := c.BindJSON(&data); err != nil {
 		logger.Error("Failed to parse JSON", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON for Action response"})
 		return
 	}
 
 	// Log the alert data
-	logger.Info("Action response received", zap.Any("request", message))
+	logger.Info("Action response received", zap.Any("request", data))
 	//Perform the action
-	err := executeActions(&message)
-	if err != nil {
-		logger.Error("Failed to execute mitigation recipe", zap.Error(err))
-	}
+	var requestType RequestType = Actions
+	go StartRecipeExecutor(c, &data, requestType)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Response Request received and processed"})
-}
-
-// Runs jobs to perform action
-func executeActions(message *map[string]interface{}) error {
-	logger.Info("Performing actions based on the response")
-	recipes, err := getRecipesFromConfigMap()
-	if err != nil {
-		logger.Error("Failed to retrieve recipes from ConfigMap", zap.Error(err))
-		return err
-	}
-	// Create a Job for each recipe
-	for recipeName, recipe := range recipes {
-		//FIXME:createJob works with alertData and not message data from the WebExBot
-		_, err := createJob(recipeName, recipe, message)
-		if err != nil {
-			logger.Error("Failed to create K8s Job", zap.Error(err))
-			return err
-			// FIXME: Handle the error as needed
-
-		}
-	}
-	return nil
 }

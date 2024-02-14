@@ -1,9 +1,9 @@
 package main
 
 type IncidentBotMessage struct {
-	UUID     string `json:"uuid"`
-	Actions  string `json:"actions"`
-	Analysis string `json:"analysis"`
+	UUID     string   `json:"uuid"`
+	Actions  []Action `json:"actions"`
+	Analysis string   `json:"analysis"`
 }
 
 type Recipe struct {
@@ -27,4 +27,9 @@ type RecipeConfig struct {
 		Name  string `yaml:"name"`
 		Value string `yaml:"value"`
 	} `yaml:"params"`
+}
+
+type Action struct {
+	Action      string `json:"action"`
+	Description string `json:"description"`
 }

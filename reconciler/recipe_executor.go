@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -20,7 +21,7 @@ const (
 )
 
 // Initialise and run the recipe executor.
-func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
+func StartRecipeExecutor(c *gin.Context, data *map[string]interface{}, requestType RequestType) {
 	// Retrieve recipes from ConfigMap
 	recipes, err := getRecipesFromConfigMap()
 	if err != nil {
@@ -28,18 +29,23 @@ func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 		return
 	}
 
-	reconciler, err := NewAlertReconciler(c, alertData, recipes)
+	reconciler, err := NewReconciler(c, data, recipes, requestType)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
 		return
 	}
 
-	// Create a Job for each recipe
-	for recipeName, recipe := range recipes {
-		_, err := createJob(recipeName, recipe, alertData)
+	if requestType == Actions {
+		err = createJobsForActions(recipes, data)
 		if err != nil {
-			logger.Error("Failed to create K8s Job", zap.Error(err))
-			// FIXME: Handle the error as needed
+			logger.Error("Failed to create jobs for Action", zap.Error(err))
+			return
+		}
+	} else if requestType == Alert {
+		err = createJobsForAlert(recipes, data)
+		if err != nil {
+			logger.Error("Failed to create jobs for Alert", zap.Error(err))
+			return
 		}
 	}
 
@@ -74,7 +80,7 @@ func getRecipesFromConfigMap() (map[string]Recipe, error) {
 
 // Create a Kubernetes Job to execute a recipe.
 func createJob(
-	recipeName string, recipe Recipe, alertData *map[string]interface{},
+	recipeName string, recipe Recipe, data *map[string]interface{},
 ) (*batchv1.Job, error) {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
 
@@ -85,7 +91,7 @@ func createJob(
 			Labels: map[string]string{
 				"app":    "euphrosyne",
 				"recipe": recipeName,
-				"uuid":   (*alertData)["uuid"].(string),
+				"uuid":   (*data)["uuid"].(string),
 			},
 			Namespace: jobNamespace,
 		},
@@ -95,7 +101,7 @@ func createJob(
 					Labels: map[string]string{
 						"app":    "euphrosyne",
 						"recipe": recipeName,
-						"uuid":   (*alertData)["uuid"].(string),
+						"uuid":   (*data)["uuid"].(string),
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -106,7 +112,7 @@ func createJob(
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								buildRecipeCommand(recipe.Config, alertData),
+								buildRecipeCommand(recipe.Config, data),
 							},
 						},
 					},
@@ -127,9 +133,50 @@ func createJob(
 	return job, nil
 }
 
+func createJobsForAlert(recipes map[string]Recipe, data *map[string]interface{}) error {
+	// Create a Job for each recipe
+	for recipeName, recipe := range recipes {
+		_, err := createJob(recipeName, recipe, data)
+		logger.Info("Created Job for recipe:" + recipeName)
+		if err != nil {
+			logger.Error("Failed to create K8s Job", zap.Error(err))
+			// FIXME: Handle the error as needed
+		}
+	}
+	return nil
+}
+
+func createJobsForActions(recipes map[string]Recipe, data *map[string]interface{}) error {
+	var actions []Action
+	var err error
+	actions, err = parseActionData(data)
+	if err != nil {
+		logger.Error("Failed to parse response action data", zap.Error(err))
+		return err
+	}
+	// Create a map for quick recipe name lookup
+	recipeNames := make(map[string]struct{}, len(recipes))
+	for recipeName := range recipes {
+		recipeNames[strings.ToLower(recipeName)] = struct{}{}
+	}
+	// Iterate over actions and create jobs for matching recipes
+	for _, action := range actions {
+		actionName := strings.ToLower(action.Action)
+		_, ok := recipeNames[actionName]
+		if ok {
+			_, err := createJob(action.Action, recipes[action.Action], data)
+			if err != nil {
+				logger.Error("Failed to create K8s Job", zap.Error(err))
+				// FIXME: Handle the error as needed
+			}
+		}
+	}
+	return nil
+}
+
 // Build Recipe command.
-func buildRecipeCommand(recipeConfig *RecipeConfig, alertData *map[string]interface{}) string {
-	alertDataStr, err := json.Marshal(alertData)
+func buildRecipeCommand(recipeConfig *RecipeConfig, data *map[string]interface{}) string {
+	dataStr, err := json.Marshal(data)
 	if err != nil {
 		logger.Error("Failed to convert alertData to string", zap.Error(err))
 	}
@@ -137,7 +184,38 @@ func buildRecipeCommand(recipeConfig *RecipeConfig, alertData *map[string]interf
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
 	for _, param := range recipeConfig.Params {
-		recipeCommand += fmt.Sprintf("--%v '%v'", param.Name, string(alertDataStr))
+		recipeCommand += fmt.Sprintf("--%v '%v'", param.Name, string(dataStr))
 	}
 	return recipeCommand
+}
+
+// Returns the list of actions from the message
+func parseActionData(data *map[string]interface{}) ([]Action, error) {
+
+	var actions []Action
+	// Check if "actions" field exists in data
+	if actionsData, ok := (*data)["actions"]; ok {
+		switch actionsData := actionsData.(type) {
+		case map[string]interface{}:
+			// If "actions" is a single object, create a single Action
+			action := Action{
+				Action:      actionsData["action"].(string),
+				Description: actionsData["description"].(string),
+			}
+			actions = append(actions, action)
+		case []interface{}:
+			// If "actions" is an array of objects, iterate through each object and create Actions
+			for _, actionData := range actionsData {
+				action := Action{
+					Action:      actionData.(map[string]interface{})["action"].(string),
+					Description: actionData.(map[string]interface{})["description"].(string),
+				}
+				actions = append(actions, action)
+			}
+		default:
+			return nil, fmt.Errorf("error parsing parseActionData")
+		}
+	}
+
+	return actions, nil
 }

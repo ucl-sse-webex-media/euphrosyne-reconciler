@@ -14,18 +14,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RequestType enumeration
+type RequestType int
+
+const (
+	// Actions represents Request Type is Actions
+	Actions RequestType = iota
+	// Alert represents Request Type is Alert
+	Alert
+)
+
 type Reconciler struct {
-	uuid      string
-	alertData *map[string]interface{}
-	pubsub    *redis.PubSub
-	recipes   map[string]Recipe
+	uuid        string
+	data        *map[string]interface{}
+	pubsub      *redis.PubSub
+	recipes     map[string]Recipe
+	requestType RequestType
 }
 
-// Initialise a reconciler for a specific alert.
-func NewAlertReconciler(
-	c *gin.Context, alertData *map[string]interface{}, recipes map[string]Recipe,
+// Initialise a reconciler for a specific alert or for actions
+func NewReconciler(
+	c *gin.Context, data *map[string]interface{}, recipes map[string]Recipe, requestType RequestType,
 ) (*Reconciler, error) {
-	uuid := (*alertData)["uuid"].(string)
+	uuid := (*data)["uuid"].(string)
 
 	// Subscribe to a new redis channel
 	pubsub := rdb.Subscribe(c, uuid)
@@ -38,10 +49,11 @@ func NewAlertReconciler(
 	}
 
 	return &Reconciler{
-		uuid:      uuid,
-		alertData: alertData,
-		pubsub:    pubsub,
-		recipes:   recipes,
+		uuid:        uuid,
+		data:        data,
+		pubsub:      pubsub,
+		recipes:     recipes,
+		requestType: requestType,
 	}, nil
 }
 
@@ -101,15 +113,25 @@ func (r *Reconciler) Run() {
 	botMessage := IncidentBotMessage{
 		UUID:     r.uuid,
 		Analysis: r.getIncidentAnalysis(completedRecipes),
-		Actions:  "",
-	}
-	err := r.postMessageToWebexBot(botMessage)
-	if err != nil {
-		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
-		// FIXME: Handle the error as needed
+		Actions: []Action{
+			{
+				// Actions are entry points to the recipe
+				Action: "dummy",
+				//Every recipe should have a description
+				Description: "This is the description for the dummy action",
+			},
+		},
 	}
 
-	err = r.pubsub.Close()
+	if r.requestType == Alert {
+		err := r.postMessageToWebexBot(botMessage)
+		if err != nil {
+			logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
+			// FIXME: Handle the error as needed
+		}
+	}
+
+	err := r.pubsub.Close()
 	if err != nil {
 		logger.Error("Failed to close channel", zap.Error(err))
 		return
