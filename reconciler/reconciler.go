@@ -59,6 +59,36 @@ func NewReconciler(
 
 // Run the reconciler to monitor the subscribed Redis channel for the outcome of each recipe.
 func (r *Reconciler) Run() {
+	completedRecipes, err := collectRecipeResult(r)
+	if err != nil {
+		logger.Error("Failed to collect recipe results", zap.Error(err))
+	}
+
+	// Send received messages to Webex Bot
+	botMessage := IncidentBotMessage{
+		UUID:     r.uuid,
+		Analysis: r.getIncidentAnalysis(completedRecipes),
+		Actions: []Action{
+			{
+				// Actions are entry points to the recipe
+				Action: "dummy",
+				//Every recipe should have a description
+				Description: "This is the description for the dummy action",
+			},
+		},
+	}
+
+	if r.requestType == Alert {
+		err := r.postMessageToWebexBot(botMessage)
+		if err != nil {
+			logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
+			// FIXME: Handle the error as needed
+		}
+	}
+
+}
+
+func collectRecipeResult(r *Reconciler) ([]Recipe, error) {
 	var completedRecipes []Recipe
 	defer func() {
 		r.Cleanup(completedRecipes)
@@ -76,6 +106,7 @@ func (r *Reconciler) Run() {
 		case msg := <-ch:
 			// Parse the recipe results from the Redis message
 			recipe, err := r.parseRecipeResults(msg.Payload)
+
 			if err != nil {
 				logger.Error("Failed to parse recipe results", zap.Error(err))
 			}
@@ -104,38 +135,18 @@ func (r *Reconciler) Run() {
 				),
 			)
 		}
-
 		if shouldBreak {
 			break
-		}
-	}
-
-	botMessage := IncidentBotMessage{
-		UUID:     r.uuid,
-		Analysis: r.getIncidentAnalysis(completedRecipes),
-		Actions: []Action{
-			{
-				// Actions are entry points to the recipe
-				Action: "dummy",
-				//Every recipe should have a description
-				Description: "This is the description for the dummy action",
-			},
-		},
-	}
-
-	if r.requestType == Alert {
-		err := r.postMessageToWebexBot(botMessage)
-		if err != nil {
-			logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
-			// FIXME: Handle the error as needed
 		}
 	}
 
 	err := r.pubsub.Close()
 	if err != nil {
 		logger.Error("Failed to close channel", zap.Error(err))
-		return
+		return nil, err
 	}
+
+	return completedRecipes, nil
 }
 
 // Aggregate the results of all recipes.
@@ -162,7 +173,6 @@ func (r *Reconciler) parseRecipeResults(message string) (Recipe, error) {
 	if err != nil {
 		return Recipe{}, err
 	}
-
 	return recipe, nil
 }
 

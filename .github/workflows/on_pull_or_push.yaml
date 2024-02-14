@@ -1,0 +1,62 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-recipes:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install recipe dependencies
+        run: |
+          cd recipes
+          pip install ".[dev]"
+
+      - name: Lint recipes
+        run: |
+          cd recipes
+          codespell . \
+            --skip .git --skip build --skip lib --skip venv --skip euphrosyne_recipes.egg-info
+          pflake8 .
+          isort --check-only --diff .
+          black --check --diff .
+
+  lint-reconciler:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "reconciler/go.mod"
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: reconciler
+          args: --timeout=30m
+
+      - name: Run golangci-lint
+        run: |
+          cd reconciler
+          golangci-lint run ./...

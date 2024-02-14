@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const (
+var (
 	configMapNamespace = "default"
 	configMapName      = "orpheus-operator-recipes"
 	jobNamespace       = "default"

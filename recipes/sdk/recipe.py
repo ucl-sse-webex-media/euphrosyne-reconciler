@@ -7,17 +7,21 @@ from enum import Enum
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from sdk.errors import IncidentParsingError
+from sdk.incident import Incident
+
 logger = logging.getLogger(__name__)
 
 
 class RecipeStatus(Enum):
     """Euphrosyne Reconciler Recipe Status."""
+
     SUCCESSFUL = "successful"
     FAILED = "failed"
     UNKNOWN = "unknown"
 
 
-class RecipeResults():
+class RecipeResults:
     """Euphrosyne Reconciler Recipe Results."""
 
     def __init__(
@@ -74,7 +78,7 @@ class RecipeResults():
         """Add a log to the recipe analysis."""
         self.analysis = f"{self.analysis} {message}" if self.analysis else message
 
-    @staticmethod
+    @classmethod
     def from_dict(cls, d):
         """Create a RecipeResults object from a dictionary."""
         status = RecipeStatus(d.get("status", RecipeStatus.UNKNOWN.value))
@@ -95,7 +99,7 @@ class RecipeResults():
         return json.dumps(self.to_dict())
 
 
-class Recipe():
+class Recipe:
     """Euphrosyne Reconciler Recipe."""
 
     def __init__(self, name, handler):
@@ -108,6 +112,7 @@ class Recipe():
     @staticmethod
     def parse_input_data(func):
         """A decorator for parsing command-line arguments."""
+
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
@@ -118,21 +123,21 @@ class Recipe():
             if parsed_args.data:
                 try:
                     data = json.loads(parsed_args.data)
+                    return func(self, Incident.from_dict(data), *args, **kwargs)
                 except json.JSONDecodeError:
-                    logger.error("Invalid input provided. Please provide valid JSON input.")
-                return func(self, data, *args, **kwargs)
+                    raise IncidentParsingError(
+                        "Invalid input provided. Please provide valid JSON input."
+                    )
             else:
-                logger.error("No input provided. Please provide input using the --data option.")
+                raise IncidentParsingError(
+                    "No input provided. Please provide input using the --data option."
+                )
 
         return wrapper
 
-    def _get_incident_uuid(self, data: dict):
-        """Get the incident UUID from the input data."""
-        return data.get("uuid")
-
-    def _get_redis_channel(self, data: dict):
+    def _get_redis_channel(self, incident: Incident):
         """Get a Redis channel name to publish the recipe results."""
-        return self._get_incident_uuid(data)
+        return incident.uuid
 
     @retry(
         wait=wait_exponential(multiplier=2, min=1, max=10),
@@ -147,8 +152,8 @@ class Recipe():
             logger.error("Could not connect to Redis. Please ensure that the service is running.")
 
     @parse_input_data
-    def run(self, data: dict):
+    def run(self, incident: Incident):
         """Run the recipe."""
-        self.results.incident = self._get_incident_uuid(data)
-        results = self.handler(data, self.results)
-        self.publish_results(self._get_redis_channel(data), results)
+        self.results.incident = incident.uuid
+        results = self.handler(incident, self.results)
+        self.publish_results(self._get_redis_channel(incident), results)
