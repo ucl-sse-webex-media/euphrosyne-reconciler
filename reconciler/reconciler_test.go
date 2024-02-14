@@ -27,7 +27,8 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 	recipeMsg1 := `{"name": "test-1-recipe"}`
 	recipeMsg2 := `{"name": "test-2-recipe"}`
-	r, err := NewAlertReconciler(c, alertData, testRecipeMap)
+	var requestType RequestType = Alert
+	r, err := NewReconciler(c, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -52,7 +53,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 	// test that the reconciler can handle a recipe that times out
 	wg.Add(2)
-	r, err = NewAlertReconciler(c, alertData, testRecipeMap)
+	r, err = NewReconciler(c, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
