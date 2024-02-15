@@ -1,7 +1,6 @@
-import requests
-from .config import AGGREGATOR_BASE_URL
-from .util import parse_args
 import logging
+
+import requests
 
 from sdk.errors import DataAggregatorHTTPError
 from sdk.incident import Incident
@@ -38,16 +37,11 @@ class DataAggregator(HTTPService):
 
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
-    def __init__(self):
+    def __init__(self, aggregator_address):
         super().__init__()
-        self.parsed_args = parse_args()
-        self.base_url = self._parse_base_url()
-        self.sources = {source: f"{self.base_url}/api/sources/{source}" for source in self.SOURCES}
-
-    def _parse_base_url(self):
-        if self.parsed_args.aggregator_base_url:
-            return self.parsed_args.aggregator_base_url
-        return AGGREGATOR_BASE_URL
+        self.sources = {
+            source: f"{aggregator_address}/api/sources/{source}" for source in self.SOURCES
+        }
 
     def get_source_url(self, source):
         """Get the base URL for a data source."""

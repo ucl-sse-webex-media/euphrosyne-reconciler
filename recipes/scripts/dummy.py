@@ -6,7 +6,7 @@ from sdk.recipe import Recipe, RecipeResults, RecipeStatus
 logger = logging.getLogger(__name__)
 
 
-def handler(incident: Incident, results: RecipeResults):
+def handler(incident: Incident, results: RecipeResults, aggregator_address):
     """Dummy Recipe."""
     logger.info("Received input:", incident)
     results.log("Tough luck mate!")

@@ -8,11 +8,11 @@ from sdk.services import DataAggregator
 logger = logging.getLogger(__name__)
 
 
-def handler(incident: Incident, results: RecipeResults):
+def handler(incident: Incident, results: RecipeResults, aggregator_address):
     """HTTP Errors Recipe."""
     logger.info("Received input:", incident)
 
-    aggregator = DataAggregator()
+    aggregator = DataAggregator(aggregator_address)
     try:
         aggregator.get_grafana_dashboard_from_incident(incident)
     except DataAggregatorHTTPError as e:

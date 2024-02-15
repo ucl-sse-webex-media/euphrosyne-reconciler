@@ -20,7 +20,7 @@ var (
 )
 
 var recipeProdConfig = map[string]string{
-	"aggregator-base-url": "http://thalia-aggregator.default.svc.cluster.local",
+	"aggregator-address": "http://thalia-aggregator.default.svc.cluster.local",
 	"redis-address":       "euphrosyne-reconciler-redis:80",
 }
 

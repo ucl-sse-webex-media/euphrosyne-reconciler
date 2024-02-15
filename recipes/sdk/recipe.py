@@ -1,18 +1,25 @@
-import redis
-from tenacity import retry, stop_after_attempt, wait_exponential
 import functools
 import json
 import logging
 from enum import Enum
-from .config import REDIS_ADDRESS
-from .util import parse_args
+
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sdk.errors import IncidentParsingError
 from sdk.incident import Incident
+from sdk.util import parse_args
+
+from .util import parse_args
 
 logger = logging.getLogger(__name__)
+
+
+class Config(Enum):
+    """Config used for local dev"""
+
+    AGGREGATOR_ADDRESS = "localhost:8000"
+    REDIS_ADDRESS = "localhost:6379"
 
 
 class RecipeStatus(Enum):
@@ -108,6 +115,7 @@ class Recipe:
         self.parsed_args = parse_args()
         self.name = name
         self.handler = handler
+        self.aggregator_address = self._parse_aggregator_address()
         redis_address = self._parse_redis_address()
         self.results = RecipeResults(name=self.name)
         try:
@@ -118,9 +126,16 @@ class Recipe:
                 "Failed to connect to redis at %s:%s", redis_address["host"], redis_address["port"]
             )
 
+    def _parse_aggregator_address(self):
+        if self.parsed_args.aggregator_address:
+            return self.parsed_args.aggregator_address
+        return Config.AGGREGATOR_ADDRESS.value
+
     def _parse_redis_address(self):
         redis_address = (
-            self.parsed_args.redis_address if self.parsed_args.redis_address else REDIS_ADDRESS
+            self.parsed_args.redis_address
+            if self.parsed_args.redis_address
+            else Config.REDIS_ADDRESS.value
         )
         split_address = redis_address.split(":")
         return {"host": split_address[0], "port": split_address[1]}
@@ -165,5 +180,5 @@ class Recipe:
     def run(self, incident: Incident):
         """Run the recipe."""
         self.results.incident = incident.uuid
-        results = self.handler(incident, self.results)
+        results = self.handler(incident, self.results, self.aggregator_address)
         self.publish_results(self._get_redis_channel(incident), results)

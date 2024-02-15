@@ -18,30 +18,6 @@ You will also need to apply the ConfigMap containing the list of available recip
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
 
-To run redis locally:
-
-```
-kubectl port-forward service/euphrosyne-reconciler-redis 6379:80
-```
-
-#### Starting reconciler locally
-
-```
-cd reconciler
-go run .
-```
-
-Default configuration is in config.go file and used for local dev.
-
-#### Executing a recipe locally
-
-```
-cd recipes
-python -m scripts.dummy --data '{"uuid":"123"}'   
-```
-
-Default configuration set in config.py file used for local dev.
-
 ### Setting up Grafana
 
 The Reconciler responds to alerts raised by an external system. Using Grafana for this purpose is

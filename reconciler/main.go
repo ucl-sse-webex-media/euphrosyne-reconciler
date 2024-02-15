@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/go-redis/redis/v8"
@@ -24,6 +25,21 @@ var (
 	webexBotAddress string = WebexBotAddress
 	recipeTimeout   int    = RecipeTimeout
 )
+
+// load environment variables
+func loadEnvVariables() {
+	if os.Getenv("REDIS_ADDRESS") != "" {
+		redisAddress = os.Getenv("REDIS_ADDRESS")
+	}
+
+	if os.Getenv("WEBEX_BOT_ADDRESS") != "" {
+		webexBotAddress = os.Getenv("WEBEX_BOT_ADDRESS")
+	}
+
+	if os.Getenv("RECIPE_TIMEOUT") != "" {
+		recipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
+	}
+}
 
 func parseConfig() {
 	// config priority: config.go < env variables < command line
@@ -107,12 +123,7 @@ func main() {
 	httpc = getHTTPClient()
 
 	var err error
-	_, err = rdb.Ping(context.Background()).Result()
-	if err != nil {
-		logger.Error("Failed to connect to redis", zap.Error(err))
-		return
-	}
-	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+	initLogger()
 
 	connectRedis()
 
