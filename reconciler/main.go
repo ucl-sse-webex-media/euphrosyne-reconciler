@@ -16,49 +16,68 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+type Config struct {
+	AggregatorAddress string
+	RedisAddress      string
+	WebexBotAddress   string
+	RecipeTimeout     int
+}
+
 var (
-	clientset       *kubernetes.Clientset
-	httpc           *http.Client
-	rdb             *redis.Client
-	logger          *zap.Logger
-	redisAddress    string = RedisAddress
-	webexBotAddress string = WebexBotAddress
-	recipeTimeout   int    = RecipeTimeout
+	clientset *kubernetes.Clientset
+	httpc     *http.Client
+	rdb       *redis.Client
+	logger    *zap.Logger
+	config    Config = Config{
+		AggregatorAddress: AggregatorAddress,
+		RedisAddress:      RedisAddress,
+		WebexBotAddress:   WebexBotAddress,
+		RecipeTimeout:     RecipeTimeout,
+	}
 )
 
-func parseConfig() {
-	// config priority: config.go < env variables < command line
+func parseConfig(config *Config) {
+	if os.Getenv("AGGREGATOR_ADDRESS") != "" {
+		config.AggregatorAddress = os.Getenv("AGGREGATOR_ADDRESS")
+	}
 
 	if os.Getenv("REDIS_ADDRESS") != "" {
-		redisAddress = os.Getenv("REDIS_ADDRESS")
+		config.RedisAddress = os.Getenv("REDIS_ADDRESS")
 	}
 
 	if os.Getenv("WEBEX_BOT_ADDRESS") != "" {
-		webexBotAddress = os.Getenv("WEBEX_BOT_ADDRESS")
+		config.WebexBotAddress = os.Getenv("WEBEX_BOT_ADDRESS")
 	}
 
 	if os.Getenv("RECIPE_TIMEOUT") != "" {
-		recipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
+		config.RecipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
 	}
 
 	flag.StringVar(
-		&redisAddress,
+		&config.AggregatorAddress,
+		"aggregator-address",
+		config.AggregatorAddress,
+		"Aggregator Address",
+	)
+
+	flag.StringVar(
+		&config.RedisAddress,
 		"redis-address",
-		redisAddress,
+		config.RedisAddress,
 		"Redis Address",
 	)
 
 	flag.StringVar(
-		&webexBotAddress,
+		&config.WebexBotAddress,
 		"webex-bot-address",
-		webexBotAddress,
+		config.WebexBotAddress,
 		"HTTP address for the Webex Bot",
 	)
 
 	flag.IntVar(
-		&recipeTimeout,
+		&config.RecipeTimeout,
 		"recipe-timeout",
-		recipeTimeout,
+		config.RecipeTimeout,
 		"Timeout in seconds for recipe execution",
 	)
 
@@ -101,9 +120,9 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func connectRedis() {
+func connectRedis(config *Config) {
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     redisAddress,
+		Addr:     config.RedisAddress,
 		Password: "",
 		DB:       0,
 	})
@@ -111,17 +130,17 @@ func connectRedis() {
 	if err != nil {
 		panic(err)
 	}
-	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+	logger.Info("Redis connected successfully", zap.String("redisAddress", config.RedisAddress))
 }
 
 func main() {
-	parseConfig()
+	parseConfig(&config)
 	httpc = getHTTPClient()
 
 	var err error
 	initLogger()
 
-	connectRedis()
+	connectRedis(&config)
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
@@ -133,7 +152,7 @@ func main() {
 		return
 	}
 
-	go StartAlertHandler()
+	go StartAlertHandler(&config)
 
 	<-shutdownChan
 	logger.Info("Shutting down...")

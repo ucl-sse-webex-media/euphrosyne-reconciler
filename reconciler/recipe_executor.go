@@ -19,13 +19,8 @@ var (
 	jobNamespace       = "default"
 )
 
-var recipeProdConfig = map[string]string{
-	"aggregator-address": "http://thalia-aggregator.default.svc.cluster.local",
-	"redis-address":       "euphrosyne-reconciler-redis:80",
-}
-
 // Initialise and run the recipe executor.
-func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
+func StartRecipeExecutor(c *gin.Context, config *Config, alertData *map[string]interface{}) {
 	// Retrieve recipes from ConfigMap
 	recipes, err := getRecipesFromConfigMap()
 	if err != nil {
@@ -33,7 +28,7 @@ func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 		return
 	}
 
-	reconciler, err := NewAlertReconciler(c, alertData, recipes)
+	reconciler, err := NewAlertReconciler(c, config, alertData, recipes)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
 		return
@@ -41,7 +36,7 @@ func StartRecipeExecutor(c *gin.Context, alertData *map[string]interface{}) {
 
 	// Create a Job for each recipe
 	for recipeName, recipe := range recipes {
-		_, err := createJob(recipeName, recipe, alertData)
+		_, err := createJob(recipeName, recipe, alertData, config)
 		if err != nil {
 			logger.Error("Failed to create K8s Job", zap.Error(err))
 			// FIXME: Handle the error as needed
@@ -79,7 +74,7 @@ func getRecipesFromConfigMap() (map[string]Recipe, error) {
 
 // Create a Kubernetes Job to execute a recipe.
 func createJob(
-	recipeName string, recipe Recipe, alertData *map[string]interface{},
+	recipeName string, recipe Recipe, alertData *map[string]interface{}, config *Config,
 ) (*batchv1.Job, error) {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
 
@@ -111,7 +106,7 @@ func createJob(
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								buildRecipeCommand(recipe.Config, alertData),
+								buildRecipeCommand(recipe.Config, config, alertData),
 							},
 						},
 					},
@@ -133,7 +128,9 @@ func createJob(
 }
 
 // Build Recipe command.
-func buildRecipeCommand(recipeConfig *RecipeConfig, alertData *map[string]interface{}) string {
+func buildRecipeCommand(
+	recipeConfig *RecipeConfig, config *Config, alertData *map[string]interface{},
+) string {
 	alertDataStr, err := json.Marshal(alertData)
 	if err != nil {
 		logger.Error("Failed to convert alertData to string", zap.Error(err))
@@ -141,12 +138,10 @@ func buildRecipeCommand(recipeConfig *RecipeConfig, alertData *map[string]interf
 
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
+	recipeCommand += fmt.Sprintf("--aggregator-address '%v' ", config.AggregatorAddress)
+	recipeCommand += fmt.Sprintf("--redis-address '%v' ", config.RedisAddress)
 	for _, param := range recipeConfig.Params {
 		recipeCommand += fmt.Sprintf("--%v '%v' ", param.Name, string(alertDataStr))
-	}
-
-	for name, value := range recipeProdConfig {
-		recipeCommand += fmt.Sprintf("--%v '%v' ", name, value)
 	}
 	return recipeCommand
 }
