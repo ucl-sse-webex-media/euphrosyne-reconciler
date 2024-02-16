@@ -125,7 +125,8 @@ func Test_Cleanup(t *testing.T) {
 		completedRecipe,
 	}
 
-	r, err := NewAlertReconciler(c, alertData, nil)
+	var requestType RequestType = Alert
+	r, err := NewReconciler(c, alertData, nil, requestType)
 	assert.Nil(t, err)
 
 	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(
