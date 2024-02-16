@@ -1,4 +1,3 @@
-from enum import Enum
 import logging
 
 import requests
@@ -7,10 +6,6 @@ from sdk.errors import DataAggregatorHTTPError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
-
-
-class AggregatorDefaultConfig(Enum):
-    AGGREGATOR_ADDRESS = "localhost:8080"
 
 
 class HTTPService:
@@ -40,15 +35,12 @@ class HTTPService:
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
+    URL = "http://localhost:8080"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
     def __init__(self, aggregator_address):
-        super().__init__()
-        if not aggregator_address:
-            aggregator_address = AggregatorDefaultConfig.AGGREGATOR_ADDRESS.value
-        self.sources = {
-            source: f"{aggregator_address}/api/sources/{source}" for source in self.SOURCES
-        }
+        super().__init__(url=(aggregator_address or self.URL))
+        self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
 
     def get_source_url(self, source):
         """Get the base URL for a data source."""

@@ -24,29 +24,3 @@ run the two tools to format your code:
 black .
 isort .
 ```
-
-## Running instructions
-
-#### Run redis locally:
-
-```
-kubectl port-forward service/euphrosyne-reconciler-redis 6379:80
-```
-
-#### Run reconciler locally
-
-```
-cd reconciler
-go run .
-```
-
-Default configuration set in config.go file
-
-#### Executing a recipe locally
-
-```
-cd recipes
-python -m scripts.dummy --data '{"uuid":"123"}'   
-```
-
-Default configuration set in Config classes in recipe.py and services.py
