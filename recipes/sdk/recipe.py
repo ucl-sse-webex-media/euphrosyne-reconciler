@@ -1,3 +1,4 @@
+import argparse
 import functools
 import json
 import logging
@@ -9,17 +10,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sdk.errors import IncidentParsingError
 from sdk.incident import Incident
-from sdk.util import parse_args
-
-from .util import parse_args
 
 logger = logging.getLogger(__name__)
 
 
-class Config(Enum):
-    """Config used for local dev"""
-
-    AGGREGATOR_ADDRESS = "localhost:8000"
+class RecipeDefaultConfig(Enum):
     REDIS_ADDRESS = "localhost:6379"
 
 
@@ -113,31 +108,14 @@ class Recipe:
     """Euphrosyne Reconciler Recipe."""
 
     def __init__(self, name, handler):
-        self.parsed_args = parse_args()
         self.name = name
         self.handler = handler
-        self.aggregator = DataAggregator(self._parse_aggregator_address())
-        redis_address = self._parse_redis_address()
+        self.aggregator = None
         self.results = RecipeResults(name=self.name)
-        try:
-            self.redisClient = redis.Redis(redis_address["host"], redis_address["port"])
-            self.redisClient.ping()
-        except redis.ConnectionError:
-            logger.error(
-                "Failed to connect to redis at %s:%s", redis_address["host"], redis_address["port"]
-            )
 
-    def _parse_aggregator_address(self):
-        if self.parsed_args.aggregator_address:
-            return self.parsed_args.aggregator_address
-        return Config.AGGREGATOR_ADDRESS.value
-
-    def _parse_redis_address(self):
-        redis_address = (
-            self.parsed_args.redis_address
-            if self.parsed_args.redis_address
-            else Config.REDIS_ADDRESS.value
-        )
+    def _parse_redis_address(self, redis_address):
+        if not redis_address:
+            redis_address = RecipeDefaultConfig.REDIS_ADDRESS.value
         split_address = redis_address.split(":")
         return {"host": split_address[0], "port": split_address[1]}
 
@@ -146,10 +124,20 @@ class Recipe:
 
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            if self.parsed_args.data:
+            parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
+            parser.add_argument("--data", type=str, help="Recipe input data")
+            parser.add_argument("--aggregator-address", type=str, help="Aggregator address")
+            parser.add_argument("--redis-address", type=str, help="Redis address")
+            parsed_args = parser.parse_args()
+
+            if parsed_args.data:
                 try:
-                    data = json.loads(self.parsed_args.data)
-                    return func(self, Incident.from_dict(data), *args, **kwargs)
+                    data = json.loads(parsed_args.data)
+                    CLI_config = {
+                        "aggregator_address": parsed_args.aggregator_address,
+                        "redis_address": parsed_args.redis_address,
+                    }
+                    return func(self, Incident.from_dict(data), CLI_config, *args, **kwargs)
                 except json.JSONDecodeError:
                     raise IncidentParsingError(
                         "Invalid input provided. Please provide valid JSON input."
@@ -178,8 +166,18 @@ class Recipe:
             logger.error("Could not connect to Redis. Please ensure that the service is running.")
 
     @parse_input_data
-    def run(self, incident: Incident):
+    def run(self, incident: Incident, CLI_config):
         """Run the recipe."""
+        redis_address = self._parse_redis_address(CLI_config["redis_address"])
+        try:
+            self.redisClient = redis.Redis(redis_address["host"], redis_address["port"])
+            self.redisClient.ping()
+        except redis.ConnectionError:
+            logger.error(
+                "Failed to connect to redis at %s:%s", redis_address["host"], redis_address["port"]
+            )
+
+        self.aggregator = DataAggregator(CLI_config["aggregator_address"])
         self.results.incident = incident.uuid
         results = self.handler(incident, self.results, self)
         self.publish_results(self._get_redis_channel(incident), results)
