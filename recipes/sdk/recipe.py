@@ -4,6 +4,7 @@ import logging
 from enum import Enum
 
 import redis
+from sdk.services import DataAggregator
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sdk.errors import IncidentParsingError
@@ -115,7 +116,7 @@ class Recipe:
         self.parsed_args = parse_args()
         self.name = name
         self.handler = handler
-        self.aggregator_address = self._parse_aggregator_address()
+        self.aggregator = DataAggregator(self._parse_aggregator_address())
         redis_address = self._parse_redis_address()
         self.results = RecipeResults(name=self.name)
         try:
@@ -180,5 +181,5 @@ class Recipe:
     def run(self, incident: Incident):
         """Run the recipe."""
         self.results.incident = incident.uuid
-        results = self.handler(incident, self.results, self.aggregator_address)
+        results = self.handler(incident, self.results, self)
         self.publish_results(self._get_redis_channel(incident), results)

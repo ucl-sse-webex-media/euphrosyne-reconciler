@@ -26,8 +26,9 @@ var (
 	recipeTimeout   int    = RecipeTimeout
 )
 
-// load environment variables
-func loadEnvVariables() {
+func parseConfig() {
+	// config priority: config.go < env variables < command line
+
 	if os.Getenv("REDIS_ADDRESS") != "" {
 		redisAddress = os.Getenv("REDIS_ADDRESS")
 	}
@@ -39,10 +40,7 @@ func loadEnvVariables() {
 	if os.Getenv("RECIPE_TIMEOUT") != "" {
 		recipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
 	}
-}
 
-func parseConfig() {
-	// config priority: config.go < env variables < command line
 	flag.StringVar(
 		&redisAddress,
 		"redis-address",
@@ -63,8 +61,6 @@ func parseConfig() {
 		recipeTimeout,
 		"Timeout in seconds for recipe execution",
 	)
-
-	loadEnvVariables()
 
 	flag.Parse()
 }
