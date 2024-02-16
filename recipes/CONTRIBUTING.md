@@ -40,7 +40,7 @@ cd reconciler
 go run .
 ```
 
-Default configuration is in config.go file
+Default configuration set in config.go file
 
 #### Executing a recipe locally
 
@@ -49,4 +49,4 @@ cd recipes
 python -m scripts.dummy --data '{"uuid":"123"}'   
 ```
 
-Default configuration set in Config class in recipe.py
+Default configuration set in Config classes in recipe.py and services.py
