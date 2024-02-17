@@ -1,17 +1,16 @@
 import logging
 
 from sdk.incident import Incident
-from sdk.recipe import Recipe, RecipeResults, RecipeStatus
+from sdk.recipe import Recipe, RecipeStatus
 
 logger = logging.getLogger(__name__)
 
 
-def handler(incident: Incident, results: RecipeResults):
+def handler(incident: Incident, recipe: Recipe):
     """Dummy Recipe."""
     logger.info("Received input:", incident)
-    results.log("Tough luck mate!")
-    results.status = RecipeStatus.SUCCESSFUL
-    return results
+    recipe.results.log("Tough luck mate!")
+    recipe.results.status = RecipeStatus.SUCCESSFUL
 
 
 def main():
