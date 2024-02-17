@@ -1,7 +1,8 @@
 import logging
 import requests
-import base64
 import os
+import json
+from requests.auth import HTTPBasicAuth
 
 from sdk.errors import DataAggregatorHTTPError
 from sdk.incident import Incident
@@ -25,7 +26,9 @@ class HTTPService:
     def post(self, url, params, body):
         """Send a POST request."""
         try:
-            response = self.session.post(url, params=params, json=body, headers=self.get_headers())
+            response = self.session.post(
+                url, params=params, json=body, headers=self.get_headers()
+            )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -33,42 +36,86 @@ class HTTPService:
             raise e
 
 
-# class Jira(HTTPService):
-#     """Interface for Jira recipe"""
-#     # secret 
-#     URL = os.getenv('JIRA_URL')
+class Jira(HTTPService):
+    """Interface for Jira recipe"""
 
-#     def __init__(self, url=None):
-#         super().__init__(url=(url or self.URL))
+    # secret
+    URL = os.getenv("JIRA_URL")
+
+    def __init__(self, url=None):
+        super().__init__(url=(url or self.URL))
     
-#     def get_headers(self):
-#         """Get HTTP headers."""
-#         jira_user = os.getenv('JIRA_USER')
-#         jira_token = os.getenv('JIRA_TOKEN')
-#         jira_credentials = jira_user + ":" + jira_token
-#         encoded_credentials = base64.b64encode(jira_credentials.encode()).decode()
+    def get_headers(self):
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
     
-#         headers = {
-#             'Authorization': f'Basic {encoded_credentials}',
-#             'Accept': 'application/json',
-#             'Content-Type': 'application/json'
-#         }
-#         return headers
+    def get_auth(self):
+        """Get HTTP headers."""
+        jira_user = os.getenv("JIRA_USER")
+        jira_token = os.getenv("JIRA_TOKEN")
+        auth = HTTPBasicAuth(jira_user, jira_token)
+        return auth
     
-#     #TODO: configuration
-#     #TODO: process error
-#     def post(self, args, **kwargs):
-#         """Send a POST request to Jira Cloud and create new issues"""
-#         res = super().post(args, **kwargs)
-#         return res
-    
-#     #TODO: complete creating issue
-#     def create_issue(data):
+    # TODO: configuration
+    # TODO: process error
+    def post(self, url, body):
+        auth = self.get_auth()
+        try:
+            response = requests.post(url, json=body, headers=self.get_headers(), auth=auth)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(e)
+            raise e
+
+    # TODO: complete creating issue
+    def create_issue(self, data: dict):
+        data = data["data"]
+        summary = data.get("summary")
+        if summary is None:
+            summary = "This is a summary"
+        issuetype = data.get("issuetype")
+        if issuetype is None:
+            issuetype = "10001"
+        project = data.get("project")
+        if project is None:
+            project = "SCRUM"
+        description = data.get("description")
+        if description is None:
+            description = "description"
+
+        ticket_fields = {
+            "fields": {
+                "summary": summary,
+                "issuetype": {"id": issuetype},
+                "project": {"key": project},
+                "description": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"text": description, "type": "text"}],
+                        }
+                    ],
+                },
+            }
+        }
+
+        payload = json.dumps(ticket_fields)
+
+        
 
 
-
-
-
+        # response = requests.request(
+        #     "POST",
+        #     self.url,
+        #     data=payload,
+        #     headers=self.get_headers(),
+        #     auth=self.get_auth
+        # )
 
 
 class DataAggregator(HTTPService):
@@ -84,7 +131,9 @@ class DataAggregator(HTTPService):
     def get_source_url(self, source):
         """Get the base URL for a data source."""
         if source not in self.SOURCES:
-            raise ValueError(f"Invalid source: '{source}'. Valid sources are: {self.SOURCES}")
+            raise ValueError(
+                f"Invalid source: '{source}'. Valid sources are: {self.SOURCES}"
+            )
         return self.sources[source]
 
     def post(self, args, **kwargs):
@@ -106,10 +155,12 @@ class DataAggregator(HTTPService):
     def _get_grafana_dashboard_and_panel(self, data: dict):
         """Get the Grafana dashboard and specific panel from the input data."""
         alert = data.get("alert")
-        dashboard_id = alert.get("dahsboard_id") or self._get_grafana_dashboard_from_url(
-            alert["dashboardURL"]
+        dashboard_id = alert.get(
+            "dahsboard_id"
+        ) or self._get_grafana_dashboard_from_url(alert["dashboardURL"])
+        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(
+            alert["panelURL"]
         )
-        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
         return dashboard_id, panel_id
 
     def get_grafana_dashboard_from_incident(self, incident: Incident):

@@ -123,7 +123,9 @@ class Recipe:
 
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
+            parser = argparse.ArgumentParser(
+                description="A Euphrosyne Reconciler recipe."
+            )
             parser.add_argument("--data", type=str, help="Recipe input data")
             parser.add_argument("--aggregator-address", type=str, help="Data Aggregator address")
             parser.add_argument("--redis-address", type=str, help="Redis address")
