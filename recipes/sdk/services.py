@@ -201,15 +201,15 @@ class DataAggregator(HTTPService):
         # The startsAt in grafana alert only represents the firing time, actually is the stop time of query 
         return alert["startsAt"]
         
-    def calculate_query_start_time(self,alert_rule,stop_time):
-        fmt_stop_time = datetime.strptime(stop_time, "%Y-%m-%dT%H:%M:%SZ")
+    def calculate_query_start_time(self,alert_rule,firing_time):
+        fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
-        query = alert_rule["data"][0]
-        query_time_range = query["relativeTimeRange"]["from"] - query["relativeTimeRange"]["to"]
-        query_interval = query["model"]["intervalMs"]
+        alert_query = alert_rule["data"][0]
+        query_time_range = alert_query["relativeTimeRange"]["from"] - alert_query["relativeTimeRange"]["to"]
+        query_interval = alert_query["model"]["intervalMs"]
         # alert_rule["for"] is the pending time, initially is like "10s" format
         pending_time = int(re.findall(r'\d+', alert_rule["for"])[0])
-        fmt_start_time = fmt_stop_time - timedelta(seconds=pending_time) - timedelta(seconds=query_time_range) - timedelta(milliseconds=query_interval)
+        fmt_start_time = fmt_firing_time - timedelta(seconds=pending_time) - timedelta(seconds=query_time_range) - timedelta(milliseconds=query_interval)
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
     
     def get_influxdb_records(self, incident: Incident,query): 
