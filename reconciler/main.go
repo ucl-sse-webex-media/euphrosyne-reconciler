@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/go-redis/redis/v8"
@@ -17,42 +15,11 @@ import (
 )
 
 var (
-	clientset       *kubernetes.Clientset
-	httpc           *http.Client
-	rdb             *redis.Client
-	logger          *zap.Logger
-	redisAddress    string
-	webexBotAddress string
-	recipeTimeout   int
+	clientset *kubernetes.Clientset
+	httpc     *http.Client
+	rdb       *redis.Client
+	logger    *zap.Logger
 )
-
-func parseConfig() {
-	flag.StringVar(
-		&redisAddress,
-		"redis-address",
-		os.Getenv("REDIS_ADDRESS"),
-		"Redis address",
-	)
-
-	flag.StringVar(
-		&webexBotAddress,
-		"webex-bot-address",
-		os.Getenv("WEBEX_BOT_ADDRESS"),
-		"HTTP address for the Webex Bot",
-	)
-
-	timeout, _ := strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
-	if timeout == 0 {
-		timeout = 300
-	}
-	flag.IntVar(
-		&recipeTimeout,
-		"recipe-timeout",
-		timeout,
-		"Timeout in seconds for recipe execution",
-	)
-	flag.Parse()
-}
 
 func initLogger() {
 	encoderCfg := zap.NewProductionEncoderConfig()
@@ -90,9 +57,9 @@ func getHTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
-func connectRedis() {
+func connectRedis(config *Config) {
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     redisAddress,
+		Addr:     config.RedisAddress,
 		Password: "",
 		DB:       0,
 	})
@@ -100,29 +67,29 @@ func connectRedis() {
 	if err != nil {
 		panic(err)
 	}
-	logger.Info("Redis connected successfully", zap.String("redisAddress", redisAddress))
+	logger.Info("Redis connected successfully", zap.String("redisAddress", config.RedisAddress))
 }
 
 func main() {
-	parseConfig()
+	config := ParseConfig(os.Args[1:])
 	httpc = getHTTPClient()
 
+	var err error
 	initLogger()
 
-	connectRedis()
+	connectRedis(&config)
 
 	// Create a channel for graceful shutdown signal
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
-	var err error
 	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
 	}
 
-	go StartAlertHandler()
+	go StartAlertHandler(&config)
 
 	<-shutdownChan
 	logger.Info("Shutting down...")

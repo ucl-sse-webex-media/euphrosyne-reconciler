@@ -35,11 +35,11 @@ class HTTPService:
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://thalia-aggregator.default.svc.cluster.local"
+    URL = "http://localhost:8080"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
-    def __init__(self, url=None):
-        super().__init__(url=(url or self.URL))
+    def __init__(self, aggregator_address):
+        super().__init__(url=(aggregator_address or self.URL))
         self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
 
     def get_source_url(self, source):
