@@ -58,19 +58,15 @@ class Jira(HTTPService):
         auth = HTTPBasicAuth(jira_user, jira_token)
         return auth
     
-    # TODO: configuration
-    # TODO: process error
     def post(self, url, body):
-        auth = self.get_auth()
         try:
-            response = requests.post(url, json=body, headers=self.get_headers(), auth=auth)
+            response = requests.post(url, json=body, headers=self.get_headers(), auth=self.get_auth())
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             logger.error(e)
             raise e
 
-    # TODO: complete creating issue
     def create_issue(self, data: dict):
         data = data["data"]
         summary = data.get("summary")
@@ -105,19 +101,12 @@ class Jira(HTTPService):
         }
 
         payload = json.dumps(ticket_fields)
-
-        
-
-
-        # response = requests.request(
-        #     "POST",
-        #     self.url,
-        #     data=payload,
-        #     headers=self.get_headers(),
-        #     auth=self.get_auth
-        # )
-
-
+        try:
+            response = self.post(self.url, body=payload)
+            return response
+        except Exception as e:
+            logger.error("Failed to create Jira issue: ", e)
+            raise
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
