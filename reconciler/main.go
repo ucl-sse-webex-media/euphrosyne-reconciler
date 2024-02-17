@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/go-redis/redis/v8"
@@ -16,73 +14,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type Config struct {
-	AggregatorAddress string
-	RedisAddress      string
-	WebexBotAddress   string
-	RecipeTimeout     int
-}
-
 var (
 	clientset *kubernetes.Clientset
 	httpc     *http.Client
 	rdb       *redis.Client
 	logger    *zap.Logger
-	config    Config = Config{
-		AggregatorAddress: AggregatorAddress,
-		RedisAddress:      RedisAddress,
-		WebexBotAddress:   WebexBotAddress,
-		RecipeTimeout:     RecipeTimeout,
-	}
 )
-
-func parseConfig(config *Config) {
-	if os.Getenv("AGGREGATOR_ADDRESS") != "" {
-		config.AggregatorAddress = os.Getenv("AGGREGATOR_ADDRESS")
-	}
-
-	if os.Getenv("REDIS_ADDRESS") != "" {
-		config.RedisAddress = os.Getenv("REDIS_ADDRESS")
-	}
-
-	if os.Getenv("WEBEX_BOT_ADDRESS") != "" {
-		config.WebexBotAddress = os.Getenv("WEBEX_BOT_ADDRESS")
-	}
-
-	if os.Getenv("RECIPE_TIMEOUT") != "" {
-		config.RecipeTimeout, _ = strconv.Atoi(os.Getenv("RECIPE_TIMEOUT"))
-	}
-
-	flag.StringVar(
-		&config.AggregatorAddress,
-		"aggregator-address",
-		config.AggregatorAddress,
-		"Aggregator Address",
-	)
-
-	flag.StringVar(
-		&config.RedisAddress,
-		"redis-address",
-		config.RedisAddress,
-		"Redis Address",
-	)
-
-	flag.StringVar(
-		&config.WebexBotAddress,
-		"webex-bot-address",
-		config.WebexBotAddress,
-		"HTTP address for the Webex Bot",
-	)
-
-	flag.IntVar(
-		&config.RecipeTimeout,
-		"recipe-timeout",
-		config.RecipeTimeout,
-		"Timeout in seconds for recipe execution",
-	)
-
-	flag.Parse()
-}
 
 func initLogger() {
 	encoderCfg := zap.NewProductionEncoderConfig()
@@ -134,7 +71,7 @@ func connectRedis(config *Config) {
 }
 
 func main() {
-	parseConfig(&config)
+	config := ParseConfig(os.Args[1:])
 	httpc = getHTTPClient()
 
 	var err error
