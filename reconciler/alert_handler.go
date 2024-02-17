@@ -8,16 +8,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartAlertHandler() {
+func StartAlertHandler(config *Config) {
 	router := gin.Default()
-	router.POST("/webhook", func(ctx *gin.Context) { handleWebhook(ctx) })
+	router.POST("/webhook", func(ctx *gin.Context) { handleWebhook(ctx, config) })
 
 	if err := router.Run(":8080"); err != nil {
 		logger.Error("Failed to start server", zap.Error(err))
 	}
 }
 
-func handleWebhook(c *gin.Context) {
+func handleWebhook(c *gin.Context, config *Config) {
 	var alertData map[string]interface{}
 
 	if err := c.BindJSON(&alertData); err != nil {
@@ -31,7 +31,7 @@ func handleWebhook(c *gin.Context) {
 	logger.Info("Alert received", zap.Any("alert", alertData))
 
 	// Start the recipe executor
-	go StartRecipeExecutor(c, &alertData)
+	go StartRecipeExecutor(c, config, &alertData)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Alert received and processed"})
 }

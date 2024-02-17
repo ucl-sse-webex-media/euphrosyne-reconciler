@@ -1,5 +1,12 @@
 package main
 
+type Config struct {
+	AggregatorAddress string
+	RedisAddress      string
+	WebexBotAddress   string
+	RecipeTimeout     int
+}
+
 type IncidentBotMessage struct {
 	UUID     string `json:"uuid"`
 	Actions  string `json:"actions"`
