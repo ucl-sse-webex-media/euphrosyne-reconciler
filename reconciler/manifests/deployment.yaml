@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: euphrosyne-reconciler
-          image: maikeee32e/euphrosyne-reconciler:latest
+          image: phoevos/euphrosyne-reconciler:latest
           command:
             - /reconciler
           args:

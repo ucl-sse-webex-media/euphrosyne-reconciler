@@ -4,7 +4,7 @@ metadata:
   name: orpheus-operator-recipes
 data:
   dummy: |
-    image: "maikeee32e/euphrosyne-recipes:latest"
+    image: "phoevos/euphrosyne-recipes:latest"
     entrypoint: "dummy"
     params:
       - name: "data"
