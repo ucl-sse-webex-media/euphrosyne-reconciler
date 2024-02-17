@@ -19,13 +19,11 @@ def handler(incident: Incident, recipe: Recipe):
         results.log(str(e))
         results.status = RecipeStatus.FAILED
 
-    alert = incident.data.get("alert").get("alerts")[0]
-    # The startsAt in grafana alert only represents the firing time, actually is the stop time of query 
-    stop_time = alert["startsAt"]
+    firing_time = aggregator.get_firing_time(incident)
     alert_rule = grafana_info["alertRule"]
     
     try:
-        start_time = aggregator.calculate_query_start_time(alert_rule,stop_time)
+        start_time = aggregator.calculate_query_start_time(alert_rule,firing_time)
     except DataAggregatorHTTPError as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
@@ -33,11 +31,10 @@ def handler(incident: Incident, recipe: Recipe):
     query = {
         "measurement" : "HTTPlogs",
         "start_time" : start_time,
-        "stop_time" : stop_time
+        "stop_time" : firing_time
     }
     
     influxdb_records = aggregator.get_influxdb_records(incident,query)
-    
     #continue analysising the influxdb_records here
     
     results.status = RecipeStatus.SUCCESSFUL

@@ -196,6 +196,11 @@ class DataAggregator(HTTPService):
         }
         return self.post(url, params={}, body=body)
 
+    def get_firing_time(self,incident):
+        alert = incident.data.get("alert").get("alerts")[0]
+        # The startsAt in grafana alert only represents the firing time, actually is the stop time of query 
+        return alert["startsAt"]
+        
     def calculate_query_start_time(self,alert_rule,stop_time):
         fmt_stop_time = datetime.strptime(stop_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
