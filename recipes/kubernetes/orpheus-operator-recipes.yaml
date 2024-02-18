@@ -15,3 +15,9 @@ data:
     params:
       - name: "data"
         value: "dummy"
+  jira: |
+    image: "phoevos/euphrosyne-recipes:latest"
+    entrypoint: "jira"
+    params:
+      - name: "data"
+        value: "dummy"
