@@ -1,5 +1,7 @@
+import datetime
 import logging
 import os
+import re
 from urllib.parse import urlparse
 
 import requests
@@ -7,6 +9,7 @@ from requests.auth import HTTPBasicAuth
 
 from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +138,7 @@ class Jira(HTTPService):
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://localhost:8080"
+    URL = "http://192.168.1.105:8080"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
     def __init__(self, aggregator_address):
@@ -164,25 +167,57 @@ class DataAggregator(HTTPService):
         """Get a Grafana panel ID from a URL."""
         return url.rsplit("=", 1)[-1]
 
-    def _get_grafana_dashboard_and_panel(self, data: dict):
-        """Get the Grafana dashboard and specific panel from the input data."""
-        alert = data.get("alert")
-        dashboard_id = alert.get("dahsboard_id") or self._get_grafana_dashboard_from_url(
-            alert["dashboardURL"]
-        )
-        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
-        return dashboard_id, panel_id
+    def _get_alert_rule_from_url(self, url: str):
+        """Get alert rule from a URL."""
+        return url.split('/')[-2]
 
-    def get_grafana_dashboard_from_incident(self, incident: Incident):
+    def _get_grafana_info(self, data: dict):
+        """Get the Grafana dashboard, specific panel and alert rule from the input data."""
+        alert = data.get("alert").get("alerts")[0]
+        
+        dashboard_id =  alert.get("panel_id") or self._get_grafana_dashboard_from_url(alert["dashboardURL"])
+        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
+        alert_rule_id = self._get_alert_rule_from_url(alert["generatorURL"])
+        
+        return dashboard_id, panel_id,alert_rule_id
+
+    def get_grafana_info_from_incident(self, incident: Incident):
         """Get a Grafana dashboard."""
         uuid = incident.uuid
-        dashboard_id, panel_id = self._get_grafana_dashboard_and_panel(incident.data)
+        dashboard_id, panel_id, alert_rule_id = self._get_grafana_info(incident.data)
         url = self.get_source_url("grafana")
         body = {
             "uuid": uuid,
             "params": {
                 "dashboard_id": dashboard_id,
                 "panel_id": panel_id,
+                "alert_rule_id" : alert_rule_id
+            },
+        }
+        return self.post(url, params={}, body=body)
+
+    def calculate_query_start_time(self,alert_rule,stop_time):
+        fmt_stop_time = datetime.strptime(stop_time, "%Y-%m-%dT%H:%M:%SZ")
+        # start time = firing time - pending time - querying duration - querying interval
+        query = alert_rule["data"][0]
+        query_time_range = query["relativeTimeRange"]["from"] - query["relativeTimeRange"]["to"]
+        query_interval = query["model"]["intervalMs"]
+        # alert_rule["for"] is the pending time, initially is like "10s" format
+        pending_time = int(re.findall(r'\d+', alert_rule["for"])[0])
+        fmt_start_time = fmt_stop_time - timedelta(seconds=pending_time) - timedelta(seconds=query_time_range) - timedelta(milliseconds=query_interval)
+        return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    def get_influxdb_records(self, incident: Incident,query): 
+        """Get influxdb records."""
+        uuid = incident.uuid
+        url = self.get_source_url("influxdb")
+        body = {
+            "uuid": uuid,
+            "params": {
+                "bucket": "ciscobucket",
+                "measurement" : query["measurement"],
+                "startTime" : query["start_time"],
+                "stopTime" : query["stop_time"],
             },
         }
         return self.post(url, body=body)

@@ -3,6 +3,7 @@ import functools
 import json
 import logging
 from enum import Enum
+import traceback
 
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -217,6 +218,7 @@ class Recipe:
             self._handler(incident, self)
         except Exception as e:
             logger.error("An error occurred while running the recipe: %s", e)
+
             self.results.status = RecipeStatus.FAILED
             raise
         self._publish_results(self._get_redis_channel(incident))
