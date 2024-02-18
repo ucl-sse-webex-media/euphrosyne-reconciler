@@ -13,6 +13,7 @@ setup(
         "console_scripts": [
             "dummy = scripts.dummy:main",
             "http-errors = scripts.http_errors:main",
+            "jira = scripts.jira:main",
         ],
     },
     extras_require={
