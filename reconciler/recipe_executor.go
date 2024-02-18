@@ -21,7 +21,9 @@ var (
 )
 
 // Initialise and run the recipe executor.
-func StartRecipeExecutor(c *gin.Context, data *map[string]interface{}, requestType RequestType) {
+func StartRecipeExecutor(
+	c *gin.Context, config *Config, data *map[string]interface{}, requestType RequestType,
+) {
 	// Retrieve recipes from ConfigMap
 	recipes, err := getRecipesFromConfigMap()
 	if err != nil {
@@ -29,20 +31,20 @@ func StartRecipeExecutor(c *gin.Context, data *map[string]interface{}, requestTy
 		return
 	}
 
-	reconciler, err := NewReconciler(c, data, recipes, requestType)
+	reconciler, err := NewReconciler(c, config, data, recipes, requestType)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
 		return
 	}
 
 	if requestType == Actions {
-		err = createJobsForActions(recipes, data)
+		err = createJobsForActions(recipes, data, config)
 		if err != nil {
 			logger.Error("Failed to create jobs for Action", zap.Error(err))
 			return
 		}
 	} else if requestType == Alert {
-		err = createJobsForAlert(recipes, data)
+		err = createJobsForAlert(recipes, data, config)
 		if err != nil {
 			logger.Error("Failed to create jobs for Alert", zap.Error(err))
 			return
@@ -80,7 +82,7 @@ func getRecipesFromConfigMap() (map[string]Recipe, error) {
 
 // Create a Kubernetes Job to execute a recipe.
 func createJob(
-	recipeName string, recipe Recipe, data *map[string]interface{},
+	recipeName string, recipe Recipe, data *map[string]interface{}, config *Config,
 ) (*batchv1.Job, error) {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
 
@@ -112,7 +114,42 @@ func createJob(
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								buildRecipeCommand(recipe.Config, data),
+								buildRecipeCommand(recipe.Config, config, data),
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name: "JIRA_URL",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "jira-url",
+										},
+									},
+								},
+								{
+									Name: "JIRA_USER",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "jira-user",
+										},
+									},
+								},
+								{
+									Name: "JIRA_TOKEN",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "jira-token",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -133,10 +170,12 @@ func createJob(
 	return job, nil
 }
 
-func createJobsForAlert(recipes map[string]Recipe, data *map[string]interface{}) error {
+func createJobsForAlert(
+	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
+) error {
 	// Create a Job for each recipe
 	for recipeName, recipe := range recipes {
-		_, err := createJob(recipeName, recipe, data)
+		_, err := createJob(recipeName, recipe, data, config)
 		logger.Info("Created Job for recipe:" + recipeName)
 		if err != nil {
 			logger.Error("Failed to create K8s Job", zap.Error(err))
@@ -146,7 +185,9 @@ func createJobsForAlert(recipes map[string]Recipe, data *map[string]interface{})
 	return nil
 }
 
-func createJobsForActions(recipes map[string]Recipe, data *map[string]interface{}) error {
+func createJobsForActions(
+	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
+) error {
 	var actions []Action
 	var err error
 	actions, err = parseActionData(data)
@@ -164,7 +205,7 @@ func createJobsForActions(recipes map[string]Recipe, data *map[string]interface{
 		actionName := strings.ToLower(action.Action)
 		_, ok := recipeNames[actionName]
 		if ok {
-			_, err := createJob(action.Action, recipes[action.Action], data)
+			_, err := createJob(action.Action, recipes[action.Action], data, config)
 			if err != nil {
 				logger.Error("Failed to create K8s Job", zap.Error(err))
 				// FIXME: Handle the error as needed
@@ -175,16 +216,20 @@ func createJobsForActions(recipes map[string]Recipe, data *map[string]interface{
 }
 
 // Build Recipe command.
-func buildRecipeCommand(recipeConfig *RecipeConfig, data *map[string]interface{}) string {
+func buildRecipeCommand(
+	recipeConfig *RecipeConfig, config *Config, data *map[string]interface{},
+) string {
 	dataStr, err := json.Marshal(data)
 	if err != nil {
-		logger.Error("Failed to convert alertData to string", zap.Error(err))
+		logger.Error("Failed to convert input data to string", zap.Error(err))
 	}
 
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
+	recipeCommand += fmt.Sprintf("--aggregator-address '%v' ", config.AggregatorAddress)
+	recipeCommand += fmt.Sprintf("--redis-address '%v' ", config.RedisAddress)
 	for _, param := range recipeConfig.Params {
-		recipeCommand += fmt.Sprintf("--%v '%v'", param.Name, string(dataStr))
+		recipeCommand += fmt.Sprintf("--%v '%v' ", param.Name, string(dataStr))
 	}
 	return recipeCommand
 }

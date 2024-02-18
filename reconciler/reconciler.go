@@ -26,6 +26,7 @@ const (
 
 type Reconciler struct {
 	uuid        string
+	config      *Config
 	data        *map[string]interface{}
 	pubsub      *redis.PubSub
 	recipes     map[string]Recipe
@@ -34,7 +35,8 @@ type Reconciler struct {
 
 // Initialise a reconciler for a specific alert or for actions
 func NewReconciler(
-	c *gin.Context, data *map[string]interface{}, recipes map[string]Recipe, requestType RequestType,
+	c *gin.Context, config *Config, data *map[string]interface{},
+	recipes map[string]Recipe, requestType RequestType,
 ) (*Reconciler, error) {
 	uuid := (*data)["uuid"].(string)
 
@@ -50,6 +52,7 @@ func NewReconciler(
 
 	return &Reconciler{
 		uuid:        uuid,
+		config:      config,
 		data:        data,
 		pubsub:      pubsub,
 		recipes:     recipes,
@@ -97,7 +100,7 @@ func collectRecipeResult(r *Reconciler) ([]Recipe, error) {
 
 	messageCount := 0
 
-	timeoutDuration := time.Duration(recipeTimeout) * time.Second
+	timeoutDuration := time.Duration(r.config.RecipeTimeout) * time.Second
 	timeout := time.NewTimer(timeoutDuration)
 	shouldBreak := false
 
@@ -131,7 +134,8 @@ func collectRecipeResult(r *Reconciler) ([]Recipe, error) {
 			shouldBreak = true
 			logger.Warn(
 				fmt.Sprintf(
-					"Recipes failed to complete in %d seconds, closing channel", recipeTimeout,
+					"Recipes failed to complete in %d seconds, closing channel",
+					r.config.RecipeTimeout,
 				),
 			)
 		}
@@ -185,7 +189,7 @@ func (r *Reconciler) postMessageToWebexBot(message IncidentBotMessage) error {
 	}
 
 	// Send the POST request
-	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
+	url := fmt.Sprintf("%s/api/analysis", r.config.WebexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err

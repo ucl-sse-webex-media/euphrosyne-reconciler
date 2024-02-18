@@ -21,17 +21,17 @@ type JobStatus struct {
 	Description string            `json:"description"`
 }
 
-func StartServer() {
+func StartServer(config *Config) {
 	router := gin.Default()
-	router.POST("/statusRequest", func(ctx *gin.Context) { handleStatusRequest(ctx) })
-	router.POST("/actionResponse", func(ctx *gin.Context) { handleActionResponse(ctx) })
+	router.POST("/statusRequest", func(ctx *gin.Context) { handleStatusRequest(ctx, config) })
+	router.POST("/actionResponse", func(ctx *gin.Context) { handleActionResponse(ctx, config) })
 	if err := router.Run(":8081"); err != nil {
 		logger.Error("Failed to start server", zap.Error(err))
 	}
 }
 
 // handles request from WebEx bot for execution status of the recipe
-func handleStatusRequest(c *gin.Context) {
+func handleStatusRequest(c *gin.Context, config *Config) {
 
 	var data map[string]interface{}
 
@@ -51,7 +51,7 @@ func handleStatusRequest(c *gin.Context) {
 	if err != nil {
 		logger.Error("Error Getting Job Status", zap.Error(err))
 	}
-	err = postStatusToWebexBot(jobStatuses)
+	err = postStatusToWebexBot(jobStatuses, config.WebexBotAddress)
 	if err != nil {
 		logger.Error("Failed to send status to Bot", zap.Error(err))
 	}
@@ -100,7 +100,7 @@ func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
 }
 
 // Post status message to Webex Bot.
-func postStatusToWebexBot(message []JobStatus) error {
+func postStatusToWebexBot(message []JobStatus, webexBotAddress string) error {
 	// Convert the messages to JSON
 	jsonData, err := json.Marshal(message)
 	if err != nil {
@@ -127,7 +127,7 @@ func postStatusToWebexBot(message []JobStatus) error {
 //-------------------------------------------------------------
 
 // handles response from WebEx Bot to execute actions
-func handleActionResponse(c *gin.Context) {
+func handleActionResponse(c *gin.Context, config *Config) {
 
 	var data map[string]interface{}
 
@@ -141,7 +141,7 @@ func handleActionResponse(c *gin.Context) {
 	logger.Info("Action response received", zap.Any("request", data))
 	//Perform the action
 	var requestType RequestType = Actions
-	go StartRecipeExecutor(c, &data, requestType)
+	go StartRecipeExecutor(c, config, &data, requestType)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Response Request received and processed"})
 }

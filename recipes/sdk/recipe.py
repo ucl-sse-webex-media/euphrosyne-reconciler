@@ -9,6 +9,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sdk.errors import IncidentParsingError
 from sdk.incident import Incident
+from sdk.services import DataAggregator
 
 logger = logging.getLogger(__name__)
 
@@ -102,28 +103,40 @@ class RecipeResults:
 class Recipe:
     """Euphrosyne Reconciler Recipe."""
 
-    def __init__(self, name, handler):
-        self.name = name
-        self.handler = handler
-        self.redisClient = redis.Redis(host="euphrosyne-reconciler-redis", port=80)
+    REDIS_ADDRESS = "localhost:6379"
 
-        self.results = RecipeResults(name=self.name)
+    def __init__(self, name, handler):
+        self._name = name
+        self._handler = handler
+        self._redis_client = None
+
+        self.aggregator = None
+        self.results = RecipeResults(name=self._name)
+
+    @property
+    def name(self):
+        return self._name
 
     @staticmethod
-    def parse_input_data(func):
+    def _parse_input_data(func):
         """A decorator for parsing command-line arguments."""
 
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
             parser.add_argument("--data", type=str, help="Recipe input data")
-
+            parser.add_argument("--aggregator-address", type=str, help="Data Aggregator address")
+            parser.add_argument("--redis-address", type=str, help="Redis address")
             parsed_args = parser.parse_args()
 
             if parsed_args.data:
                 try:
                     data = json.loads(parsed_args.data)
-                    return func(self, Incident.from_dict(data), *args, **kwargs)
+                    cli_config = {
+                        "aggregator_address": parsed_args.aggregator_address,
+                        "redis_address": parsed_args.redis_address,
+                    }
+                    return func(self, Incident.from_dict(data), cli_config, *args, **kwargs)
                 except json.JSONDecodeError:
                     raise IncidentParsingError(
                         "Invalid input provided. Please provide valid JSON input."
@@ -139,21 +152,48 @@ class Recipe:
         """Get a Redis channel name to publish the recipe results."""
         return incident.uuid
 
+    def _parse_redis_address(self, redis_address=None):
+        redis_address = redis_address or self.REDIS_ADDRESS
+        split_address = redis_address.split(":")
+        return {"host": split_address[0], "port": split_address[1]}
+
+    def _connect_to_redis(self, redis_address=None):
+        """Connect to Redis."""
+        redis_address = self._parse_redis_address(redis_address)
+        try:
+            self._redis_client = redis.Redis(redis_address["host"], redis_address["port"])
+            self._redis_client.ping()
+        except redis.ConnectionError:
+            logger.error(
+                "Failed to connect to redis at %s:%s", redis_address["host"], redis_address["port"]
+            )
+            self.results.status = RecipeStatus.FAILED
+            raise
+
     @retry(
         wait=wait_exponential(multiplier=2, min=1, max=10),
         stop=stop_after_attempt(3),
         reraise=True,
     )
-    def publish_results(self, channel: str, results: RecipeResults):
+    def _publish_results(self, channel: str):
         """Publish recipe results to Redis."""
         try:
-            self.redisClient.publish(channel, str(results))
+            self._redis_client.publish(channel, str(self.results))
         except redis.exceptions.ConnectionError:
             logger.error("Could not connect to Redis. Please ensure that the service is running.")
+            self.results.status = RecipeStatus.FAILED
+            raise
 
-    @parse_input_data
-    def run(self, incident: Incident):
+    @_parse_input_data
+    def run(self, incident: Incident, cli_config: dict):
         """Run the recipe."""
+        self._connect_to_redis(cli_config["redis_address"])
+        self.aggregator = DataAggregator(cli_config["aggregator_address"])
         self.results.incident = incident.uuid
-        results = self.handler(incident, self.results)
-        self.publish_results(self._get_redis_channel(incident), results)
+        try:
+            self._handler(incident, self)
+        except Exception as e:
+            logger.error("An error occurred while running the recipe: %s", e)
+            self.results.status = RecipeStatus.FAILED
+            raise
+        self._publish_results(self._get_redis_channel(incident))

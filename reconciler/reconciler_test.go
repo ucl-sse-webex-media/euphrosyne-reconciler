@@ -17,8 +17,10 @@ import (
 func Test_CollectRecipeResult(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	recipeTimeout = 2
 
+	testConfig := Config{
+		RecipeTimeout: 2,
+	}
 	// simulate 2 recipes
 	testRecipeMap := map[string]Recipe{
 		"test-1-recipe": recipe_1,
@@ -28,7 +30,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 	recipeMsg1 := `{"name": "test-1-recipe"}`
 	recipeMsg2 := `{"name": "test-2-recipe"}`
 	var requestType RequestType = Alert
-	r, err := NewReconciler(c, alertData, testRecipeMap, requestType)
+	r, err := NewReconciler(c, &testConfig, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -53,7 +55,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 	// test that the reconciler can handle a recipe that times out
 	wg.Add(2)
-	r, err = NewReconciler(c, alertData, testRecipeMap, requestType)
+	r, err = NewReconciler(c, &testConfig, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -75,6 +77,10 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 // Test that created resources are cleaned up successfully.
 func Test_Cleanup(t *testing.T) {
+	testConfig := Config{
+		RecipeTimeout: 2,
+	}
+
 	// a Job that is expected to run successfully
 	jobObj := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -126,7 +132,7 @@ func Test_Cleanup(t *testing.T) {
 	}
 
 	var requestType RequestType = Alert
-	r, err := NewReconciler(c, alertData, nil, requestType)
+	r, err := NewReconciler(c, &testConfig, alertData, nil, requestType)
 	assert.Nil(t, err)
 
 	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(

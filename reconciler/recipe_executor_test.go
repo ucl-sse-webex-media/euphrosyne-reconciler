@@ -135,8 +135,7 @@ func init() {
 	c, _ = gin.CreateTestContext(w)
 
 	// make sure redis is running
-	redisAddress = "localhost:6379"
-	connectRedis()
+	connectRedis(&Config{RedisAddress: "localhost:6379"})
 }
 
 // Test that the recipe executor can retrieve recipes from the ConfigMap.
@@ -161,7 +160,11 @@ func Test_GetRecipeConfig(t *testing.T) {
 
 // Test that the recipe executor can create a Job for the provided alert data.
 func Test_CreateJob(t *testing.T) {
-	job, err := createJob("test-1-recipe", recipe_1, alertData)
+	testConfig := Config{
+		AggregatorAddress: "localhost:8080",
+		RedisAddress:      "localhost:6379",
+	}
+	job, err := createJob("test-1-recipe", recipe_1, alertData, &testConfig)
 	assert.NotNil(t, job)
 	assert.Nil(t, err)
 	getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(

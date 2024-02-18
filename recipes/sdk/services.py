@@ -1,8 +1,10 @@
 import logging
+import os
 
 import requests
+from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError
+from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -11,20 +13,27 @@ logger = logging.getLogger(__name__)
 class HTTPService:
     """Interface for an HTTP Service."""
 
-    def __init__(self, url=None):
+    def __init__(self, url):
         self.session = requests.Session()
         self.url = url
 
     def get_headers(self):
         """Get HTTP headers."""
         return {
+            "Accept": "application/json",
             "Content-Type": "application/json",
         }
 
-    def post(self, url, params, body):
+    def post(self, url, params=None, body=None, auth=None):
         """Send a POST request."""
         try:
-            response = self.session.post(url, params=params, json=body, headers=self.get_headers())
+            response = self.session.post(
+                url,
+                params=params,
+                json=body,
+                headers=self.get_headers(),
+                auth=auth,
+            )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -32,14 +41,76 @@ class HTTPService:
             raise e
 
 
+class Jira(HTTPService):
+    """Interface for Atlassian Jira."""
+
+    ISSUE_DEFAULTS = {
+        "issuetype": "Story",
+        "project": "SCRUM",
+        "description": "This is the issue description.",
+    }
+
+    def __init__(self, url=None):
+        self._load_environment_variables()
+        super().__init__(url or self.url)
+
+    def _load_environment_variables(self):
+        """Load environment variables."""
+        self.url = os.getenv("JIRA_URL")
+        self.user = os.getenv("JIRA_USER")
+        self.token = os.getenv("JIRA_TOKEN")
+        if not self.url or not self.user or not self.token:
+            raise JiraParsingError(
+                "JIRA_URL, JIRA_USER, and JIRA_TOKEN environment variables must be set."
+            )
+
+    def get_auth(self):
+        """Get HTTP Basic Authentication object."""
+        return HTTPBasicAuth(self.user, self.token)
+
+    def create_issue(self, data: dict):
+        """Create a Jira issue."""
+        data = data["data"]
+        summary = data.get("summary")
+        if not summary:
+            raise JiraParsingError("Summary needs to be provided.")
+        issuetype = data.get("issuetype") or self.ISSUE_DEFAULTS["issuetype"]
+        project = data.get("project") or self.ISSUE_DEFAULTS["project"]
+        description = data.get("description") or self.ISSUE_DEFAULTS["description"]
+
+        issue_fields = {
+            "fields": {
+                "summary": summary,
+                "issuetype": {"name": issuetype},
+                "project": {"key": project},
+                "description": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"text": description, "type": "text"}],
+                        }
+                    ],
+                },
+            }
+        }
+        try:
+            response = self.post(self.url, body=issue_fields, auth=self.get_auth())
+            return {"key": response.get("key"), "summary": summary, "url": response.get("self")}
+        except requests.exceptions.RequestException as e:
+            logger.error("Failed to create Jira issue: ", e)
+            raise JiraHTTPError(e)
+
+
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://thalia-aggregator.default.svc.cluster.local"
+    URL = "http://localhost:8080"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
-    def __init__(self, url=None):
-        super().__init__(url=(url or self.URL))
+    def __init__(self, aggregator_address):
+        super().__init__(url=(aggregator_address or self.URL))
         self.sources = {source: f"{self.url}/api/sources/{source}" for source in self.SOURCES}
 
     def get_source_url(self, source):
@@ -85,11 +156,4 @@ class DataAggregator(HTTPService):
                 "panel_id": panel_id,
             },
         }
-        return self.post(url, params={}, body=body)
-    
-    def get_data_from_alert(self,alert):
-        "Get the data from the Aggregator based on the alert "
-        body={
-            alert:alert
-        }
-        return self.post(self.url,params={},body=body)
+        return self.post(url, body=body)
