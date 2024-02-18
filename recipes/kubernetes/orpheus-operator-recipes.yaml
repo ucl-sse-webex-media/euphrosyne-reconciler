@@ -4,20 +4,20 @@ metadata:
   name: orpheus-operator-recipes
 data:
   dummy: |
-    image: "wakawakaliulala/euphrosyne-recipes:latest"
+    image: "phoevos/euphrosyne-recipes:latest"
     entrypoint: "dummy"
     params:
       - name: "data"
         value: "dummy"
-  # http-errors: |
-  #   image: "phoevos/euphrosyne-recipes:latest"
-  #   entrypoint: "http-errors"
-  #   params:
-  #     - name: "data"
-  #       value: "dummy"
-  # jira: |
-  #   image: "wakawakaliulala/euphrosyne-recipes:latest"
-  #   entrypoint: "jira"
-  #   params:
-  #     - name: "data"
-  #       value: "dummy"
+  http-errors: |
+    image: "phoevos/euphrosyne-recipes:latest"
+    entrypoint: "http-errors"
+    params:
+      - name: "data"
+        value: "dummy"
+  jira: |
+    image: "phoevos/euphrosyne-recipes:latest"
+    entrypoint: "jira"
+    params:
+      - name: "data"
+        value: "dummy"

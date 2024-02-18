@@ -1,10 +1,10 @@
 import logging
-import requests
 import os
-import json
+
+import requests
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError, JiraParsingError, JiraHTTPError
+from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class HTTPService:
     """Interface for an HTTP Service."""
 
-    def __init__(self, url=None):
+    def __init__(self, url):
         self.session = requests.Session()
         self.url = url
 
@@ -27,15 +27,13 @@ class HTTPService:
     def post(self, url, params=None, body=None, auth=None):
         """Send a POST request."""
         try:
-            print(url, params, body, auth)
             response = self.session.post(
                 url,
-                params=params or {},
-                json=body or {},
+                params=params,
+                json=body,
                 headers=self.get_headers(),
-                auth=auth or {},
+                auth=auth,
             )
-            
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -44,28 +42,34 @@ class HTTPService:
 
 
 class Jira(HTTPService):
-    """Interface for Jira recipe"""
+    """Interface for Atlassian Jira."""
 
-    # secret
-    URL = os.getenv("JIRA_URL")
     ISSUE_DEFAULTS = {
-        "issuetype": "10001",
+        "issuetype": "Story",
         "project": "SCRUM",
-        "description": "This is the issue description",
+        "description": "This is the issue description.",
     }
 
     def __init__(self, url=None):
-        super().__init__(url=(url or self.URL))
+        self._load_environment_variables()
+        super().__init__(url or self.url)
+
+    def _load_environment_variables(self):
+        """Load environment variables."""
+        self.url = os.getenv("JIRA_URL")
+        self.user = os.getenv("JIRA_USER")
+        self.token = os.getenv("JIRA_TOKEN")
+        if not self.url or not self.user or not self.token:
+            raise JiraParsingError(
+                "JIRA_URL, JIRA_USER, and JIRA_TOKEN environment variables must be set."
+            )
 
     def get_auth(self):
-        """Get HTTP headers."""
-        if not os.getenv("JIRA_USER") or not os.getenv("JIRA_TOKEN"):
-            raise JiraParsingError(
-                "JIRA_USER and JIRA_TOKEN environment variables need to be provided"
-            )
-        return HTTPBasicAuth(os.getenv("JIRA_USER"), os.getenv("JIRA_TOKEN"))
+        """Get HTTP Basic Authentication object."""
+        return HTTPBasicAuth(self.user, self.token)
 
     def create_issue(self, data: dict):
+        """Create a Jira issue."""
         data = data["data"]
         summary = data.get("summary")
         if not summary:
@@ -77,7 +81,7 @@ class Jira(HTTPService):
         issue_fields = {
             "fields": {
                 "summary": summary,
-                "issuetype": {"id": issuetype},
+                "issuetype": {"name": issuetype},
                 "project": {"key": project},
                 "description": {
                     "type": "doc",
@@ -91,10 +95,8 @@ class Jira(HTTPService):
                 },
             }
         }
-
-        payload = json.dumps(issue_fields)
         try:
-            response = self.post(self.url, body=payload, auth=self.get_auth())
+            response = self.post(self.url, body=issue_fields, auth=self.get_auth())
             return {"key": response.get("key"), "summary": summary, "url": response.get("self")}
         except requests.exceptions.RequestException as e:
             logger.error("Failed to create Jira issue: ", e)
@@ -154,4 +156,4 @@ class DataAggregator(HTTPService):
                 "panel_id": panel_id,
             },
         }
-        return self.post(url, params={}, body=body)
+        return self.post(url, body=body)
