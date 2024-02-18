@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: jira-
+  namespace: default
+  labels:
+    app: euphrosyne
+    recipe: jira
+    uuid: fd7acbbb-cc51-40b9-a3a0-10ee1abf8668
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: euphrosyne
+        recipe: jira
+        uuid: fd7acbbb-cc51-40b9-a3a0-10ee1abf8668
+    spec:
+      containers:
+      - name: recipe-container
+        command:
+        - /bin/sh
+        - -c
+        - "jira --data '{\"uuid\": \"1234\", \"action\": {\"action\": \"jira\",\"description\": \"create jira ticket\"}, \"data\":{\"summary\": \"test summary\", \"issuetype\": \"10001\", \"project\": \"SCRUM\", \"description\": \"test description\"}}'"
+        image: wakawakaliulala/euphrosyne-recipes:latest
+        env:
+          - name: JIRA_URL
+            valueFrom:
+              secretKeyRef:
+                name: euphrosyne-keys
+                key: jira_url
+          - name: JIRA_USER
+            valueFrom:
+              secretKeyRef:
+                name: euphrosyne-keys
+                key: jira_user
+          - name: JIRA_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: euphrosyne-keys
+                key: jira_token
+      restartPolicy: Never

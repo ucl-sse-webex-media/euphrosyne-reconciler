@@ -4,7 +4,7 @@ import os
 import json
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError
+from sdk.errors import DataAggregatorHTTPError, JiraParsingError, JiraHTTPError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -20,15 +20,22 @@ class HTTPService:
     def get_headers(self):
         """Get HTTP headers."""
         return {
+            "Accept": "application/json",
             "Content-Type": "application/json",
         }
 
-    def post(self, url, params, body):
+    def post(self, url, params=None, body=None, auth=None):
         """Send a POST request."""
         try:
+            print(url, params, body, auth)
             response = self.session.post(
-                url, params=params, json=body, headers=self.get_headers()
+                url,
+                params=params or {},
+                json=body or {},
+                headers=self.get_headers(),
+                auth=auth or {},
             )
+            
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -41,48 +48,33 @@ class Jira(HTTPService):
 
     # secret
     URL = os.getenv("JIRA_URL")
+    ISSUE_DEFAULTS = {
+        "issuetype": "10001",
+        "project": "SCRUM",
+        "description": "This is the issue description",
+    }
 
     def __init__(self, url=None):
         super().__init__(url=(url or self.URL))
-    
-    def get_headers(self):
-        return {
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-    
+
     def get_auth(self):
         """Get HTTP headers."""
-        jira_user = os.getenv("JIRA_USER")
-        jira_token = os.getenv("JIRA_TOKEN")
-        auth = HTTPBasicAuth(jira_user, jira_token)
-        return auth
-    
-    def post(self, url, body):
-        try:
-            response = requests.post(url, json=body, headers=self.get_headers(), auth=self.get_auth())
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(e)
-            raise e
+        if not os.getenv("JIRA_USER") or not os.getenv("JIRA_TOKEN"):
+            raise JiraParsingError(
+                "JIRA_USER and JIRA_TOKEN environment variables need to be provided"
+            )
+        return HTTPBasicAuth(os.getenv("JIRA_USER"), os.getenv("JIRA_TOKEN"))
 
     def create_issue(self, data: dict):
         data = data["data"]
         summary = data.get("summary")
-        if summary is None:
-            summary = "This is a summary"
-        issuetype = data.get("issuetype")
-        if issuetype is None:
-            issuetype = "10001"
-        project = data.get("project")
-        if project is None:
-            project = "SCRUM"
-        description = data.get("description")
-        if description is None:
-            description = "description"
+        if not summary:
+            raise JiraParsingError("Summary needs to be provided.")
+        issuetype = data.get("issuetype") or self.ISSUE_DEFAULTS["issuetype"]
+        project = data.get("project") or self.ISSUE_DEFAULTS["project"]
+        description = data.get("description") or self.ISSUE_DEFAULTS["description"]
 
-        ticket_fields = {
+        issue_fields = {
             "fields": {
                 "summary": summary,
                 "issuetype": {"id": issuetype},
@@ -100,13 +92,15 @@ class Jira(HTTPService):
             }
         }
 
-        payload = json.dumps(ticket_fields)
+        payload = json.dumps(issue_fields)
         try:
-            response = self.post(self.url, body=payload)
-            return response
-        except Exception as e:
+            response = self.post(self.url, body=payload, auth=self.get_auth())
+            return {"key": response.get("key"), "summary": summary, "url": response.get("self")}
+        except requests.exceptions.RequestException as e:
             logger.error("Failed to create Jira issue: ", e)
-            raise
+            raise JiraHTTPError(e)
+
+
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
@@ -120,9 +114,7 @@ class DataAggregator(HTTPService):
     def get_source_url(self, source):
         """Get the base URL for a data source."""
         if source not in self.SOURCES:
-            raise ValueError(
-                f"Invalid source: '{source}'. Valid sources are: {self.SOURCES}"
-            )
+            raise ValueError(f"Invalid source: '{source}'. Valid sources are: {self.SOURCES}")
         return self.sources[source]
 
     def post(self, args, **kwargs):
@@ -144,12 +136,10 @@ class DataAggregator(HTTPService):
     def _get_grafana_dashboard_and_panel(self, data: dict):
         """Get the Grafana dashboard and specific panel from the input data."""
         alert = data.get("alert")
-        dashboard_id = alert.get(
-            "dahsboard_id"
-        ) or self._get_grafana_dashboard_from_url(alert["dashboardURL"])
-        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(
-            alert["panelURL"]
+        dashboard_id = alert.get("dahsboard_id") or self._get_grafana_dashboard_from_url(
+            alert["dashboardURL"]
         )
+        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
         return dashboard_id, panel_id
 
     def get_grafana_dashboard_from_incident(self, incident: Incident):
