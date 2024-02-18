@@ -18,6 +18,17 @@ You will also need to apply the ConfigMap containing the list of available recip
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
 
+In order for the Euphrosyne Reconciler to be able to interact with external services, we load the
+corresponding credentials from Kubernetes secrets. Please run the following command, providing your
+own credentials for accessing Jira:
+
+```bash
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-url=<your Jira server URL> \
+  --from-literal=jira-user=<your Jira username> \
+  --from-literal=jira-token=<your Jira token>
+```
+
 ### Setting up Grafana
 
 The Reconciler responds to alerts raised by an external system. Using Grafana for this purpose is
