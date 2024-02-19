@@ -70,6 +70,14 @@ class RecipeResults:
         self.results["links"].append(link)
 
     @property
+    def actions(self):
+        return self.results["actions"]
+
+    def add_action(self, action: str):
+        """Add an action to the recipe results."""
+        self.results["actions"].append(action)
+
+    @property
     def analysis(self):
         return self.results["analysis"]
 
