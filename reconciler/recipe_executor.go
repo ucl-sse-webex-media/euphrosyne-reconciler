@@ -205,7 +205,11 @@ func createJobsForActions(
 	for _, action := range actions {
 		_, ok := recipes[action.Action]
 		if ok {
-			_, err := createJob(action.Action, recipes[action.Action], &action.Data, config)
+			wrappedData := map[string]interface{}{
+				"data": action.Data,
+				"uuid": (*data)["uuid"].(string),
+			}
+			_, err := createJob(action.Action, recipes[action.Action], &wrappedData, config)
 			if err != nil {
 				logger.Error("Failed to create K8s Job", zap.Error(err))
 				// FIXME: Handle the error as needed
