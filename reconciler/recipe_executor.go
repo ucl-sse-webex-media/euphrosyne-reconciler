@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -183,7 +182,6 @@ func createJobsForAlert(
 	// Create a Job for each recipe
 	for recipeName, recipe := range recipes {
 		_, err := createJob(recipeName, recipe, data, config)
-		logger.Info("Created Job for recipe:" + recipeName)
 		if err != nil {
 			logger.Error("Failed to create K8s Job", zap.Error(err))
 			// FIXME: Handle the error as needed
@@ -198,21 +196,16 @@ func createJobsForActions(
 	var actions []Action
 	var err error
 	actions, err = parseActionData(data)
+	logger.Info("ParsedActions", zap.Any("parsedActions", actions))
 	if err != nil {
 		logger.Error("Failed to parse response action data", zap.Error(err))
 		return err
 	}
-	// Create a map for quick recipe name lookup
-	recipeNames := make(map[string]struct{}, len(recipes))
-	for recipeName := range recipes {
-		recipeNames[strings.ToLower(recipeName)] = struct{}{}
-	}
-	// Iterate over actions and create jobs for matching recipes
+
 	for _, action := range actions {
-		actionName := strings.ToLower(action.Action)
-		_, ok := recipeNames[actionName]
+		_, ok := recipes[action.Action]
 		if ok {
-			_, err := createJob(action.Action, recipes[action.Action], data, config)
+			_, err := createJob(action.Action, recipes[action.Action], &action.Data, config)
 			if err != nil {
 				logger.Error("Failed to create K8s Job", zap.Error(err))
 				// FIXME: Handle the error as needed
@@ -245,25 +238,17 @@ func buildRecipeCommand(
 func parseActionData(data *map[string]interface{}) ([]Action, error) {
 
 	var actions []Action
-	// Check if "actions" field exists in data
-	if actionsData, ok := (*data)["actions"]; ok {
-		switch actionsData := actionsData.(type) {
+	// Extract the "action" field from the provided data
+	if actionData, ok := (*data)["action"]; ok {
+		switch actionData := actionData.(type) {
 		case map[string]interface{}:
-			// If "actions" is a single object, create a single Action
+			// If "action" is a single object, create a single Action
 			action := Action{
-				Action:      actionsData["action"].(string),
-				Description: actionsData["description"].(string),
+				Action:      actionData["action"].(string),
+				Description: actionData["description"].(string),
+				Data:        (*data)["data"].(map[string]interface{}),
 			}
 			actions = append(actions, action)
-		case []interface{}:
-			// If "actions" is an array of objects, iterate through each object and create Actions
-			for _, actionData := range actionsData {
-				action := Action{
-					Action:      actionData.(map[string]interface{})["action"].(string),
-					Description: actionData.(map[string]interface{})["description"].(string),
-				}
-				actions = append(actions, action)
-			}
 		default:
 			return nil, fmt.Errorf("error parsing parseActionData")
 		}
