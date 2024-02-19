@@ -23,14 +23,14 @@ type JobStatus struct {
 
 func StartServer(config *Config) {
 	router := gin.Default()
-	router.POST("/statusRequest", func(ctx *gin.Context) { handleStatusRequest(ctx, config) })
-	router.POST("/actionResponse", func(ctx *gin.Context) { handleActionResponse(ctx, config) })
+	router.POST("/api/status", func(ctx *gin.Context) { handleStatusRequest(ctx, config) })
+	router.POST("/api/actions", func(ctx *gin.Context) { handleActionsRequest(ctx, config) })
 	if err := router.Run(":8081"); err != nil {
 		logger.Error("Failed to start server", zap.Error(err))
 	}
 }
 
-// handles request from WebEx bot for execution status of the recipe
+// Handle request from Webex Bot for execution status of the submitted recipes.
 func handleStatusRequest(c *gin.Context, config *Config) {
 
 	var data map[string]interface{}
@@ -59,44 +59,40 @@ func handleStatusRequest(c *gin.Context, config *Config) {
 	c.JSON(http.StatusOK, gin.H{"message": "Status Request received and processed"})
 }
 
-// Gets the job status
+// Get the list of Job statuses for a specific UUID.
 func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
-	jobList, err := clientset.BatchV1().Jobs(jobNamespace).List(context.TODO(), metav1.ListOptions{})
+	listOptions := metav1.ListOptions{}
+	if _, ok := (*message)["uuid"]; ok {
+		listOptions.LabelSelector = fmt.Sprintf("uuid=%s", (*message)["uuid"])
+	}
+	jobList, err := clientset.BatchV1().Jobs(jobNamespace).List(context.TODO(), listOptions)
 	if err != nil {
-		logger.Error("Failed to get clienset form K8", zap.Error(err))
+		logger.Error("Failed to list K8s Jobs", zap.Error(err))
 		return nil, err
 	}
 
-	uuid := (*message)["uuid"]
-	fmt.Printf(uuid.(string))
-
-	var allJobStatuses []JobStatus
+	var jobStatuses []JobStatus
 
 	for _, job := range jobList.Items {
-		var jobStatus JobStatus
-		if value, ok := job.Labels["uuid"]; ok && value == uuid {
-			jobStatus = JobStatus{
-				Name:      job.Name,
-				StartTime: job.CreationTimestamp.Time.Format(time.RFC3339),
-				Labels:    job.Labels,
-				//Get description of recipe from  from Configmap
-				Description: "Hi! I am the description for the recipe",
-			}
-			if job.Status.Active > 0 {
-				jobStatus.Status = "Active"
-			} else if job.Status.Succeeded > 0 {
-				jobStatus.Status = "Completed"
-			} else if job.Status.Failed > 0 {
-				jobStatus.Status = "Failed"
-			}
-
+		jobStatus := JobStatus{
+			Name:        job.Name,
+			StartTime:   job.CreationTimestamp.Time.Format(time.RFC3339),
+			Labels:      job.Labels,
+			Description: job.Annotations["description"],
+		}
+		if job.Status.Active > 0 {
+			jobStatus.Status = "Active"
+		} else if job.Status.Succeeded > 0 {
+			jobStatus.Status = "Completed"
+		} else if job.Status.Failed > 0 {
+			jobStatus.Status = "Failed"
 		}
 
-		allJobStatuses = append(allJobStatuses, jobStatus)
+		jobStatuses = append(jobStatuses, jobStatus)
 	}
-	logger.Info("All Job Statuses", zap.Any("statuses", allJobStatuses))
+	logger.Info("All Job Statuses", zap.Any("statuses", jobStatuses))
 
-	return allJobStatuses, nil
+	return jobStatuses, nil
 }
 
 // Post status message to Webex Bot.
@@ -124,10 +120,8 @@ func postStatusToWebexBot(message []JobStatus, webexBotAddress string) error {
 
 }
 
-//-------------------------------------------------------------
-
-// handles response from WebEx Bot to execute actions
-func handleActionResponse(c *gin.Context, config *Config) {
+// Handle request from Webex Bot to execute actions.
+func handleActionsRequest(c *gin.Context, config *Config) {
 
 	var data map[string]interface{}
 
@@ -137,9 +131,8 @@ func handleActionResponse(c *gin.Context, config *Config) {
 		return
 	}
 
-	// Log the alert data
 	logger.Info("Action response received", zap.Any("request", data))
-	//Perform the action
+
 	var requestType RequestType = Actions
 	go StartRecipeExecutor(c, config, &data, requestType)
 

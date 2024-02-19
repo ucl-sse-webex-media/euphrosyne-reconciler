@@ -25,11 +25,12 @@ func StartRecipeExecutor(
 	c *gin.Context, config *Config, data *map[string]interface{}, requestType RequestType,
 ) {
 	// Retrieve recipes from ConfigMap
-	recipes, err := getRecipesFromConfigMap()
+	recipes, err := getRecipesFromConfigMap(requestType)
 	if err != nil {
 		logger.Error("Failed to retrieve recipes from ConfigMap", zap.Error(err))
 		return
 	}
+	logger.Info("Retrieved recipes from ConfigMap", zap.Any("recipes", recipes))
 
 	reconciler, err := NewReconciler(c, config, data, recipes, requestType)
 	if err != nil {
@@ -57,7 +58,7 @@ func StartRecipeExecutor(
 }
 
 // Retrieve recipes from ConfigMap.
-func getRecipesFromConfigMap() (map[string]Recipe, error) {
+func getRecipesFromConfigMap(requestType RequestType) (map[string]Recipe, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(configMapNamespace).Get(
 		context.TODO(), configMapName, metav1.GetOptions{},
 	)
@@ -65,19 +66,22 @@ func getRecipesFromConfigMap() (map[string]Recipe, error) {
 		return nil, err
 	}
 
-	recipes := make(map[string]Recipe)
-	for key, value := range configMap.Data {
-		// Parse the value as YAML into RecipeConfig
-		var recipeConfig RecipeConfig
-		err := yaml.Unmarshal([]byte(value), &recipeConfig)
-		if err != nil {
-			logger.Error("Failed to parse recipe configuration", zap.Error(err))
-			// FIXME: Handle the error as needed
-			continue
-		}
-		recipes[key] = Recipe{Config: &recipeConfig}
+	var recipeConfigMap map[string]RecipeConfig
+	if requestType == Actions {
+		err = yaml.Unmarshal([]byte(configMap.Data["actions"]), &recipeConfigMap)
+	} else {
+		err = yaml.Unmarshal([]byte(configMap.Data["debugging"]), &recipeConfigMap)
 	}
-	return recipes, nil
+	if err != nil {
+		return nil, err
+	}
+
+	recipeMap := make(map[string]Recipe)
+	for recipeName, recipeConfig := range recipeConfigMap {
+		recipeMap[recipeName] = Recipe{Config: &recipeConfig}
+	}
+
+	return recipeMap, nil
 }
 
 // Create a Kubernetes Job to execute a recipe.
@@ -90,6 +94,9 @@ func createJob(
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%v-", recipeName),
+			Annotations: map[string]string{
+				"description": recipe.Config.Description,
+			},
 			Labels: map[string]string{
 				"app":    "euphrosyne",
 				"recipe": recipeName,

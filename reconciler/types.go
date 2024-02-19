@@ -28,15 +28,17 @@ type Recipe struct {
 }
 
 type RecipeConfig struct {
-	Image      string `yaml:"image"`
-	Entrypoint string `yaml:"entrypoint"`
-	Params     []struct {
+	Image       string `yaml:"image"`
+	Entrypoint  string `yaml:"entrypoint"`
+	Description string `yaml:"description"`
+	Params      []struct {
 		Name  string `yaml:"name"`
 		Value string `yaml:"value"`
 	} `yaml:"params"`
 }
 
 type Action struct {
-	Action      string `json:"action"`
-	Description string `json:"description"`
+	Action      string                 `json:"action"`
+	Description string                 `json:"description"`
+	Data        map[string]interface{} `json:"data"`
 }

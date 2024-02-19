@@ -30,6 +30,7 @@ class RecipeResults:
         incident: str = None,
         name: str = None,
         status: RecipeStatus = None,
+        actions: list[str] = None,
         analysis: str = None,
         json: str = None,
         links: list[str] = None,
@@ -38,6 +39,7 @@ class RecipeResults:
         self.name = name or ""
         self._status = status or RecipeStatus.UNKNOWN
         self.results = {
+            "actions": actions or [],
             "analysis": analysis or "",
             "json": json or "",
             "links": links or [],

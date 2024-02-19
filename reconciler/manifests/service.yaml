@@ -13,20 +13,6 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8080
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: euphrosyne-reconciler-external
-  labels:
-    app: orpheus-operator
-    component: euphrosyne-reconciler
-spec:
-  selector:
-    app: orpheus-operator
-    component: euphrosyne-reconciler
-  ports:
     - protocol: TCP
       port: 81
       targetPort: 8081

@@ -18,10 +18,8 @@ import (
 type RequestType int
 
 const (
-	// Actions represents Request Type is Actions
-	Actions RequestType = iota
-	// Alert represents Request Type is Alert
-	Alert
+	Actions RequestType = iota // Action Request Type
+	Alert                      // Alert Request Type
 )
 
 type Reconciler struct {

@@ -3,21 +3,26 @@ kind: ConfigMap
 metadata:
   name: orpheus-operator-recipes
 data:
-  dummy: |
-    image: "phoevos/euphrosyne-recipes:latest"
-    entrypoint: "dummy"
-    params:
-      - name: "data"
-        value: "dummy"
-  http-errors: |
-    image: "phoevos/euphrosyne-recipes:latest"
-    entrypoint: "http-errors"
-    params:
-      - name: "data"
-        value: "dummy"
-  jira: |
-    image: "phoevos/euphrosyne-recipes:latest"
-    entrypoint: "jira"
-    params:
-      - name: "data"
-        value: "dummy"
+  debugging: |
+    dummy:
+      image: "phoevos/euphrosyne-recipes:latest"
+      entrypoint: "dummy"
+      description: "Dummy recipe for debugging purposes."
+      params:
+        - name: "data"
+          value: "dummy"
+    http-errors:
+      image: "phoevos/euphrosyne-recipes:latest"
+      entrypoint: "http-errors"
+      description: "Recipe for debugging alerts related to HTTP errors."
+      params:
+        - name: "data"
+          value: "dummy"
+  actions: |
+    jira:
+      image: "phoevos/euphrosyne-recipes:latest"
+      entrypoint: "jira"
+      description: "Recipe for creating a JIRA issue."
+      params:
+        - name: "data"
+          value: "dummy"
