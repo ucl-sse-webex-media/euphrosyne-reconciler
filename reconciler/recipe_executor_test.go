@@ -21,6 +21,7 @@ const (
 
 var recipe_1 = Recipe{
 	Config: &RecipeConfig{
+		Enabled:     false,
 		Image:       imageName,
 		Entrypoint:  "test-1-recipe",
 		Description: "Test 1 Recipe",
@@ -35,6 +36,7 @@ var recipe_1 = Recipe{
 
 var recipe_2 = Recipe{
 	Config: &RecipeConfig{
+		Enabled:     true,
 		Image:       imageName,
 		Description: "Test 2 Recipe",
 		Entrypoint:  "test-2-recipe",
@@ -49,6 +51,7 @@ var recipe_2 = Recipe{
 
 var recipe_1_config = fmt.Sprintf(`
 test-1-recipe:
+  enabled: false
   image: "%s"
   entrypoint: "test-1-recipe"
   description: "Test 1 Recipe"
@@ -59,6 +62,7 @@ test-1-recipe:
 
 var recipe_2_config = fmt.Sprintf(`
 test-2-recipe:
+  enabled: true
   image: "%s"
   entrypoint: "test-2-recipe"
   description: "Test 2 Recipe"
@@ -161,11 +165,20 @@ func Test_GetRecipeConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType)
+		recipe, err := getRecipesFromConfigMap(requestType, false)
 		assert.Nil(t, err)
 		assert.Equal(t, len(testRecipeMap), len(recipe))
 
 		assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
+		assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
+	}
+
+	// Test that the recipe executor can retrieve only enabled recipes from the ConfigMap.
+	for _, requestType := range []RequestType{Actions, Alert} {
+		recipe, err := getRecipesFromConfigMap(requestType, true)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(recipe))
+
 		assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
 	}
 }

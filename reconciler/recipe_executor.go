@@ -24,7 +24,7 @@ func StartRecipeExecutor(
 	c *gin.Context, config *Config, data *map[string]interface{}, requestType RequestType,
 ) {
 	// Retrieve recipes from ConfigMap
-	recipes, err := getRecipesFromConfigMap(requestType)
+	recipes, err := getRecipesFromConfigMap(requestType, true)
 	if err != nil {
 		logger.Error("Failed to retrieve recipes from ConfigMap", zap.Error(err))
 		return
@@ -56,8 +56,10 @@ func StartRecipeExecutor(
 	logger.Info("Recipe execution started successfully")
 }
 
-// Retrieve recipes from ConfigMap.
-func getRecipesFromConfigMap(requestType RequestType) (map[string]Recipe, error) {
+// Retrieve recipes from ConfigMap, optionally filtering by enabled status.
+func getRecipesFromConfigMap(
+	requestType RequestType, filterEnabled bool,
+) (map[string]Recipe, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(configMapNamespace).Get(
 		context.TODO(), configMapName, metav1.GetOptions{},
 	)
@@ -78,7 +80,9 @@ func getRecipesFromConfigMap(requestType RequestType) (map[string]Recipe, error)
 	recipeMap := make(map[string]Recipe)
 	for recipeName, recipeConfig := range recipeConfigMap {
 		recipeConfigCopy := recipeConfig
-		recipeMap[recipeName] = Recipe{Config: &recipeConfigCopy}
+		if recipeConfigCopy.Enabled || !filterEnabled {
+			recipeMap[recipeName] = Recipe{Config: &recipeConfigCopy}
+		}
 	}
 
 	return recipeMap, nil
