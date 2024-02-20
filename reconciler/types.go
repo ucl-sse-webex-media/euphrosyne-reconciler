@@ -29,6 +29,7 @@ type Recipe struct {
 }
 
 type RecipeConfig struct {
+	Enabled     bool   `yaml:"enabled"`
 	Image       string `yaml:"image"`
 	Entrypoint  string `yaml:"entrypoint"`
 	Description string `yaml:"description"`
