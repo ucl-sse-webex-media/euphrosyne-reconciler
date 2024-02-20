@@ -25,6 +25,21 @@ class HTTPService:
             "Content-Type": "application/json",
         }
 
+    def get(self, url, params=None, auth=None):
+        """Send a GET request."""
+        try:
+            response = self.session.get(
+                url,
+                params=params,
+                headers=self.get_headers(),
+                auth=auth,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(e)
+            raise e
+
     def post(self, url, params=None, body=None, auth=None):
         """Send a POST request."""
         try:
