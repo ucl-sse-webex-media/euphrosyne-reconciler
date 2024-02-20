@@ -33,4 +33,5 @@ spec:
             - "300"
           ports:
             - containerPort: 8080
+            - containerPort: 8081
       serviceAccountName: euphrosyne-reconciler

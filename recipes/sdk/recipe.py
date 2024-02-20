@@ -30,6 +30,7 @@ class RecipeResults:
         incident: str = None,
         name: str = None,
         status: RecipeStatus = None,
+        actions: list[str] = None,
         analysis: str = None,
         json: str = None,
         links: list[str] = None,
@@ -38,6 +39,7 @@ class RecipeResults:
         self.name = name or ""
         self._status = status or RecipeStatus.UNKNOWN
         self.results = {
+            "actions": actions or [],
             "analysis": analysis or "",
             "json": json or "",
             "links": links or [],
@@ -66,6 +68,14 @@ class RecipeResults:
     def add_link(self, link: str):
         """Add a link to the recipe results."""
         self.results["links"].append(link)
+
+    @property
+    def actions(self):
+        return self.results["actions"]
+
+    def add_action(self, action: str):
+        """Add an action to the recipe results."""
+        self.results["actions"].append(action)
 
     @property
     def analysis(self):
@@ -98,6 +108,11 @@ class RecipeResults:
     def __str__(self):
         """Convert the recipe results to a string."""
         return json.dumps(self.to_dict())
+
+    class Action:
+        """Euphrosyne Reconciler Recipe Action."""
+
+        JIRA = "jira"
 
 
 class Recipe:
