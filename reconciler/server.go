@@ -44,8 +44,6 @@ func handleStatusRequest(c *gin.Context, config *Config) {
 	// Log the alert data
 	logger.Info("Status Request received", zap.Any("request", data))
 
-	// var requestType RequestType = StatusRequest
-	// handleRequest(requestType, &requestData)
 	var jobStatuses []JobStatus
 	jobStatuses, err := getJobStatus(&data)
 	if err != nil {
@@ -61,9 +59,11 @@ func handleStatusRequest(c *gin.Context, config *Config) {
 
 // Get the list of Job statuses for a specific UUID.
 func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
-	listOptions := metav1.ListOptions{}
+	listOptions := metav1.ListOptions{
+		LabelSelector: "app=euphrosyne",
+	}
 	if _, ok := (*message)["uuid"]; ok {
-		listOptions.LabelSelector = fmt.Sprintf("uuid=%s", (*message)["uuid"])
+		listOptions.LabelSelector += fmt.Sprintf(",uuid=%s", (*message)["uuid"])
 	}
 	jobList, err := clientset.BatchV1().Jobs(jobNamespace).List(context.TODO(), listOptions)
 	if err != nil {
@@ -71,7 +71,7 @@ func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
 		return nil, err
 	}
 
-	var jobStatuses []JobStatus
+	jobStatuses := []JobStatus{}
 
 	for _, job := range jobList.Items {
 		jobStatus := JobStatus{
@@ -90,7 +90,7 @@ func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
 
 		jobStatuses = append(jobStatuses, jobStatus)
 	}
-	logger.Info("All Job Statuses", zap.Any("statuses", jobStatuses))
+	logger.Info("Euphrosyne Reconciler Jobs", zap.Any("jobs", jobStatuses))
 
 	return jobStatuses, nil
 }
@@ -104,7 +104,7 @@ func postStatusToWebexBot(message []JobStatus, webexBotAddress string) error {
 	}
 
 	// Send the POST request
-	url := fmt.Sprintf("%s/api/actions", webexBotAddress)
+	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -132,9 +132,7 @@ func handleActionsRequest(c *gin.Context, config *Config) {
 	}
 
 	logger.Info("Action response received", zap.Any("request", data))
-
-	var requestType RequestType = Actions
-	go StartRecipeExecutor(c, config, &data, requestType)
+	go StartRecipeExecutor(c, config, &data, Actions)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Response Request received and processed"})
 }

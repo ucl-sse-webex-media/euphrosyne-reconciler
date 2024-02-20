@@ -9,7 +9,7 @@ type Config struct {
 
 type IncidentBotMessage struct {
 	UUID     string   `json:"uuid"`
-	Actions  []Action `json:"actions"`
+	Actions  []string `json:"actions"`
 	Analysis string   `json:"analysis"`
 }
 
@@ -20,6 +20,7 @@ type Recipe struct {
 		Incident string `json:"incident"`
 		Status   string `json:"status"`
 		Results  struct {
+			Actions  []string `json:"actions"`
 			Analysis string   `json:"analysis"`
 			JSON     string   `json:"json"`
 			Links    []string `json:"links"`
@@ -38,7 +39,6 @@ type RecipeConfig struct {
 }
 
 type Action struct {
-	Action      string                 `json:"action"`
-	Description string                 `json:"description"`
-	Data        map[string]interface{} `json:"data"`
+	Name string                 `json:"name"`
+	Data map[string]interface{} `json:"data"`
 }

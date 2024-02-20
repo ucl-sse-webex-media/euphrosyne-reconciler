@@ -10,9 +10,11 @@ spec:
     app: orpheus-operator
     component: euphrosyne-reconciler
   ports:
-    - protocol: TCP
+    - name: webhook
+      protocol: TCP
       port: 80
       targetPort: 8080
-    - protocol: TCP
+    - name: server
+      protocol: TCP
       port: 81
       targetPort: 8081

@@ -63,30 +63,21 @@ func (r *Reconciler) Run() {
 	completedRecipes, err := collectRecipeResult(r)
 	if err != nil {
 		logger.Error("Failed to collect recipe results", zap.Error(err))
+		return
 	}
 
 	// Send received messages to Webex Bot
 	botMessage := IncidentBotMessage{
 		UUID:     r.uuid,
 		Analysis: r.getIncidentAnalysis(completedRecipes),
-		Actions: []Action{
-			{
-				// Actions are entry points to the recipe
-				Action: "dummy",
-				//Every recipe should have a description
-				Description: "This is the description for the dummy action",
-			},
-		},
+		Actions:  r.getActions(completedRecipes),
 	}
 
-	if r.requestType == Alert {
-		err := r.postMessageToWebexBot(botMessage)
-		if err != nil {
-			logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
-			// FIXME: Handle the error as needed
-		}
+	err = r.postMessageToWebexBot(botMessage)
+	if err != nil {
+		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
+		// FIXME: Handle the error as needed
 	}
-
 }
 
 func collectRecipeResult(r *Reconciler) ([]Recipe, error) {
@@ -166,6 +157,17 @@ func (r *Reconciler) getIncidentAnalysis(completedRecipes []Recipe) string {
 		}
 	}
 	return incidentAnalysis
+}
+
+// Retrieve the suggested actions from the completed recipes.
+func (r *Reconciler) getActions(completedRecipes []Recipe) []string {
+	var actions []string
+	for _, recipe := range completedRecipes {
+		if recipe.Execution.Status == "successful" {
+			actions = append(actions, recipe.Execution.Results.Actions...)
+		}
+	}
+	return actions
 }
 
 // Parse recipe results from Redis message.

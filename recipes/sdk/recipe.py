@@ -109,6 +109,11 @@ class RecipeResults:
         """Convert the recipe results to a string."""
         return json.dumps(self.to_dict())
 
+    class Action:
+        """Euphrosyne Reconciler Recipe Action."""
+
+        JIRA = "jira"
+
 
 class Recipe:
     """Euphrosyne Reconciler Recipe."""

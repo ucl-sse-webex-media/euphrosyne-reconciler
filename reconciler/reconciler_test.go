@@ -121,6 +121,7 @@ func Test_Cleanup(t *testing.T) {
 			Incident string "json:\"incident\""
 			Status   string "json:\"status\""
 			Results  struct {
+				Actions  []string "json:\"actions\""
 				Analysis string   "json:\"analysis\""
 				JSON     string   "json:\"json\""
 				Links    []string "json:\"links\""

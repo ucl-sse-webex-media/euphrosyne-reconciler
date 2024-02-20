@@ -14,7 +14,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: euphrosyne-reconciler-external
+            name: euphrosyne-reconciler
             port:
               number: 81
       

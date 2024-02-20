@@ -17,5 +17,7 @@ rules:
   resources:
   - jobs
   verbs:
+  - get
+  - list
   - create
   - deletecollection

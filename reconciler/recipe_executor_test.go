@@ -48,36 +48,28 @@ var recipe_2 = Recipe{
 }
 
 var recipe_1_config = fmt.Sprintf(`
-image: "%s"
-entrypoint: "test-1-recipe"
-description: "Test 1 Recipe"
-params:
-- name: "data"
-  value: "dummy"
+test-1-recipe:
+  image: "%s"
+  entrypoint: "test-1-recipe"
+  description: "Test 1 Recipe"
+  params:
+  - name: "data"
+    value: "dummy"
 `, imageName)
 
 var recipe_2_config = fmt.Sprintf(`
-image: "%s"
-entrypoint: "test-2-recipe"
-description: "Test 2 Recipe"
-params:
-- name: "data"
-  value: "dummy"
+test-2-recipe:
+  image: "%s"
+  entrypoint: "test-2-recipe"
+  description: "Test 2 Recipe"
+  params:
+  - name: "data"
+    value: "dummy"
 `, imageName)
 
-var debuggingRecipes = fmt.Sprintf(`
-	test-1-recipe:
-	  %s
-	test-2-recipe:
-	  %s
-`, recipe_1_config, recipe_2_config)
+var debuggingRecipes = fmt.Sprintf("%s%s", recipe_1_config, recipe_2_config)
 
-var actionsRecipes = fmt.Sprintf(`
-	test-1-recipe:
-	  %s
-	test-2-recipe:
-	  %s
-`, recipe_1_config, recipe_2_config)
+var actionsRecipes = fmt.Sprintf("%s%s", recipe_1_config, recipe_2_config)
 
 var configMap = map[string]string{
 	"debugging": debuggingRecipes,
@@ -168,12 +160,14 @@ func Test_GetRecipeConfig(t *testing.T) {
 	err := createTestConfigmap(configMap)
 	assert.Nil(t, err)
 
-	recipe, err := getRecipesFromConfigMap(Alert)
-	assert.Nil(t, err)
-	assert.Equal(t, len(testRecipeMap), len(recipe))
+	for _, requestType := range []RequestType{Actions, Alert} {
+		recipe, err := getRecipesFromConfigMap(requestType)
+		assert.Nil(t, err)
+		assert.Equal(t, len(testRecipeMap), len(recipe))
 
-	assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
-	assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
+		assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
+		assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
+	}
 }
 
 // Test that the recipe executor can create a Job for the provided alert data.

@@ -77,7 +77,8 @@ func getRecipesFromConfigMap(requestType RequestType) (map[string]Recipe, error)
 
 	recipeMap := make(map[string]Recipe)
 	for recipeName, recipeConfig := range recipeConfigMap {
-		recipeMap[recipeName] = Recipe{Config: &recipeConfig}
+		recipeConfigCopy := recipeConfig
+		recipeMap[recipeName] = Recipe{Config: &recipeConfigCopy}
 	}
 
 	return recipeMap, nil
@@ -176,6 +177,7 @@ func createJob(
 	return job, nil
 }
 
+// Create Jobs to execute a list of recipes.
 func createJobsForAlert(
 	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
 ) error {
@@ -190,26 +192,26 @@ func createJobsForAlert(
 	return nil
 }
 
+// Create Jobs for the actions in the Webex Bot request.
 func createJobsForActions(
 	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
 ) error {
 	var actions []Action
 	var err error
 	actions, err = parseActionData(data)
-	logger.Info("ParsedActions", zap.Any("parsedActions", actions))
 	if err != nil {
-		logger.Error("Failed to parse response action data", zap.Error(err))
+		logger.Error("Failed to parse actions", zap.Error(err))
 		return err
 	}
 
 	for _, action := range actions {
-		_, ok := recipes[action.Action]
+		_, ok := recipes[action.Name]
 		if ok {
 			wrappedData := map[string]interface{}{
 				"data": action.Data,
 				"uuid": (*data)["uuid"].(string),
 			}
-			_, err := createJob(action.Action, recipes[action.Action], &wrappedData, config)
+			_, err := createJob(action.Name, recipes[action.Name], &wrappedData, config)
 			if err != nil {
 				logger.Error("Failed to create K8s Job", zap.Error(err))
 				// FIXME: Handle the error as needed
@@ -238,25 +240,32 @@ func buildRecipeCommand(
 	return recipeCommand
 }
 
-// Returns the list of actions from the message
+// Parse the action data from the Webex Bot request.
 func parseActionData(data *map[string]interface{}) ([]Action, error) {
-
 	var actions []Action
-	// Extract the "action" field from the provided data
-	if actionData, ok := (*data)["action"]; ok {
-		switch actionData := actionData.(type) {
-		case map[string]interface{}:
-			// If "action" is a single object, create a single Action
-			action := Action{
-				Action:      actionData["action"].(string),
-				Description: actionData["description"].(string),
-				Data:        (*data)["data"].(map[string]interface{}),
+	if actionData, ok := (*data)["actions"]; ok {
+		for _, item := range actionData.([]interface{}) {
+			actionMap, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("Expected Action to be a valid JSON object")
 			}
+
+			var action Action
+			action.Name, ok = actionMap["name"].(string)
+			if !ok {
+				return nil, fmt.Errorf("Action 'name' field is either missing or not a string")
+			}
+
+			data, ok := actionMap["data"].(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf(
+					"Action 'data' field is either missing or not valid JSON object",
+				)
+			}
+			action.Data = data
+
 			actions = append(actions, action)
-		default:
-			return nil, fmt.Errorf("error parsing parseActionData")
 		}
 	}
-
 	return actions, nil
 }
