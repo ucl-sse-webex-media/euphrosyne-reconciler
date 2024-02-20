@@ -25,12 +25,6 @@ var recipe_1 = Recipe{
 		Image:       imageName,
 		Entrypoint:  "test-1-recipe",
 		Description: "Test 1 Recipe",
-		Params: []struct {
-			Name  string `yaml:"name"`
-			Value string `yaml:"value"`
-		}{
-			{Name: "data", Value: "dummy"},
-		},
 	},
 }
 
@@ -40,12 +34,6 @@ var recipe_2 = Recipe{
 		Image:       imageName,
 		Description: "Test 2 Recipe",
 		Entrypoint:  "test-2-recipe",
-		Params: []struct {
-			Name  string `yaml:"name"`
-			Value string `yaml:"value"`
-		}{
-			{Name: "data", Value: "dummy"},
-		},
 	},
 }
 
@@ -55,9 +43,6 @@ test-1-recipe:
   image: "%s"
   entrypoint: "test-1-recipe"
   description: "Test 1 Recipe"
-  params:
-  - name: "data"
-    value: "dummy"
 `, imageName)
 
 var recipe_2_config = fmt.Sprintf(`
@@ -66,9 +51,6 @@ test-2-recipe:
   image: "%s"
   entrypoint: "test-2-recipe"
   description: "Test 2 Recipe"
-  params:
-  - name: "data"
-    value: "dummy"
 `, imageName)
 
 var debuggingRecipes = fmt.Sprintf("%s%s", recipe_1_config, recipe_2_config)

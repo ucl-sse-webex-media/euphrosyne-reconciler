@@ -33,10 +33,6 @@ type RecipeConfig struct {
 	Image       string `yaml:"image"`
 	Entrypoint  string `yaml:"entrypoint"`
 	Description string `yaml:"description"`
-	Params      []struct {
-		Name  string `yaml:"name"`
-		Value string `yaml:"value"`
-	} `yaml:"params"`
 }
 
 type Action struct {

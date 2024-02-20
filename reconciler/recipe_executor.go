@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -234,13 +235,14 @@ func buildRecipeCommand(
 		logger.Error("Failed to convert input data to string", zap.Error(err))
 	}
 
+	// Escape the quotes inside the JSON string
+	escapedDataStr := strings.ReplaceAll(string(dataStr), `"`, `\"`)
+
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
 	recipeCommand += fmt.Sprintf("--aggregator-address '%v' ", config.AggregatorAddress)
 	recipeCommand += fmt.Sprintf("--redis-address '%v' ", config.RedisAddress)
-	for _, param := range recipeConfig.Params {
-		recipeCommand += fmt.Sprintf("--%v '%v' ", param.Name, string(dataStr))
-	}
+	recipeCommand += fmt.Sprintf("--data \"%v\" ", escapedDataStr)
 	return recipeCommand
 }
 
