@@ -1,9 +1,9 @@
 import logging
 import os
+from urllib.parse import urlparse
 
 import requests
 from requests.auth import HTTPBasicAuth
-from urllib.parse import urlparse
 
 from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
@@ -84,6 +84,18 @@ class Jira(HTTPService):
         """Get HTTP Basic Authentication object."""
         return HTTPBasicAuth(self.user, self.token)
 
+    def get_issue_url(self, project_key: str, issue_key: str):
+        """Get the URL for a Jira issue."""
+        parsed_url = urlparse(self.url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+        board_url = f"{base_url}/rest/agile/1.0/board?projectKeyOrId={project_key}"
+        board_details = self.get(board_url, auth=self.get_auth())
+
+        board_id = board_details["values"][0]["id"]
+        issue = f"?selectedIssue={issue_key}"
+        return f"{base_url}/jira/software/projects/{project_key}/boards/{board_id}/{issue}"
+
     def create_issue(self, data: dict):
         """Create a Jira issue."""
         data = data["data"]
@@ -114,16 +126,7 @@ class Jira(HTTPService):
         try:
             response = self.post(self.url, body=issue_fields, auth=self.get_auth())
             issue_key = response.get("key")
-            parsed_url = urlparse(self.url)
-            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-            # get board id from project key
-            board_url = f"{base_url}/rest/agile/1.0/board?projectKeyOrId={project}"
-            board_details = self.session.get(board_url, auth=self.get_auth()).json()
-            print(board_details)
-            board_id = board_details["values"][0]["id"]
-            # get the issue detail url
-            detail_url = f"{base_url}/jira/software/projects/{project}/boards/{board_id}/?selectedIssue={issue_key}"
-            print(f"\"key\": {issue_key}, \"summary\": {summary}, \"url\": {detail_url}")
+            detail_url = self.get_issue_url(project, issue_key)
             return {"key": issue_key, "summary": summary, "url": detail_url}
         except requests.exceptions.RequestException as e:
             logger.error("Failed to create Jira issue: ", e)
