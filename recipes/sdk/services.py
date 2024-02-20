@@ -3,6 +3,7 @@ import os
 
 import requests
 from requests.auth import HTTPBasicAuth
+from urllib.parse import urlparse
 
 from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
@@ -97,7 +98,18 @@ class Jira(HTTPService):
         }
         try:
             response = self.post(self.url, body=issue_fields, auth=self.get_auth())
-            return {"key": response.get("key"), "summary": summary, "url": response.get("self")}
+            issue_key = response.get("key")
+            parsed_url = urlparse(self.url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            # get board id from project key
+            board_url = f"{base_url}/rest/agile/1.0/board?projectKeyOrId={project}"
+            board_details = self.session.get(board_url, auth=self.get_auth()).json()
+            print(board_details)
+            board_id = board_details["values"][0]["id"]
+            # get the issue detail url
+            detail_url = f"{base_url}/jira/software/projects/{project}/boards/{board_id}/?selectedIssue={issue_key}"
+            print(f"\"key\": {issue_key}, \"summary\": {summary}, \"url\": {detail_url}")
+            return {"key": issue_key, "summary": summary, "url": detail_url}
         except requests.exceptions.RequestException as e:
             logger.error("Failed to create Jira issue: ", e)
             raise JiraHTTPError(e)
