@@ -21,8 +21,9 @@ const (
 
 var recipe_1 = Recipe{
 	Config: &RecipeConfig{
-		Image:      imageName,
-		Entrypoint: "test-1-recipe",
+		Image:       imageName,
+		Entrypoint:  "test-1-recipe",
+		Description: "Test 1 Recipe",
 		Params: []struct {
 			Name  string `yaml:"name"`
 			Value string `yaml:"value"`
@@ -34,8 +35,9 @@ var recipe_1 = Recipe{
 
 var recipe_2 = Recipe{
 	Config: &RecipeConfig{
-		Image:      imageName,
-		Entrypoint: "test-2-recipe",
+		Image:       imageName,
+		Description: "Test 2 Recipe",
+		Entrypoint:  "test-2-recipe",
 		Params: []struct {
 			Name  string `yaml:"name"`
 			Value string `yaml:"value"`
@@ -46,24 +48,32 @@ var recipe_2 = Recipe{
 }
 
 var recipe_1_config = fmt.Sprintf(`
-image: "%s"
-entrypoint: "test-1-recipe"
-params:
-- name: "data"
-  value: "dummy"
+test-1-recipe:
+  image: "%s"
+  entrypoint: "test-1-recipe"
+  description: "Test 1 Recipe"
+  params:
+  - name: "data"
+    value: "dummy"
 `, imageName)
 
 var recipe_2_config = fmt.Sprintf(`
-image: "%s"
-entrypoint: "test-2-recipe"
-params:
-- name: "data"
-  value: "dummy"
+test-2-recipe:
+  image: "%s"
+  entrypoint: "test-2-recipe"
+  description: "Test 2 Recipe"
+  params:
+  - name: "data"
+    value: "dummy"
 `, imageName)
 
+var debuggingRecipes = fmt.Sprintf("%s%s", recipe_1_config, recipe_2_config)
+
+var actionsRecipes = fmt.Sprintf("%s%s", recipe_1_config, recipe_2_config)
+
 var configMap = map[string]string{
-	"test-1-recipe": recipe_1_config,
-	"test-2-recipe": recipe_2_config,
+	"debugging": debuggingRecipes,
+	"actions":   actionsRecipes,
 }
 
 var alertData = &map[string]interface{}{
@@ -150,12 +160,14 @@ func Test_GetRecipeConfig(t *testing.T) {
 	err := createTestConfigmap(configMap)
 	assert.Nil(t, err)
 
-	recipe, err := getRecipesFromConfigMap()
-	assert.Nil(t, err)
-	assert.Equal(t, len(testRecipeMap), len(recipe))
+	for _, requestType := range []RequestType{Actions, Alert} {
+		recipe, err := getRecipesFromConfigMap(requestType)
+		assert.Nil(t, err)
+		assert.Equal(t, len(testRecipeMap), len(recipe))
 
-	assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
-	assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
+		assert.Equal(t, testRecipeMap["test-1-recipe"], recipe["test-1-recipe"])
+		assert.Equal(t, testRecipeMap["test-2-recipe"], recipe["test-2-recipe"])
+	}
 }
 
 // Test that the recipe executor can create a Job for the provided alert data.

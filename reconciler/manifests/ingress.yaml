@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: euphrosyne-reconciler
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: "/api/"
+        pathType: Prefix
+        backend:
+          service:
+            name: euphrosyne-reconciler
+            port:
+              number: 81
+      

@@ -29,7 +29,8 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 	recipeMsg1 := `{"name": "test-1-recipe"}`
 	recipeMsg2 := `{"name": "test-2-recipe"}`
-	r, err := NewAlertReconciler(c, &testConfig, alertData, testRecipeMap)
+	var requestType RequestType = Alert
+	r, err := NewReconciler(c, &testConfig, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -54,7 +55,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 
 	// test that the reconciler can handle a recipe that times out
 	wg.Add(2)
-	r, err = NewAlertReconciler(c, &testConfig, alertData, testRecipeMap)
+	r, err = NewReconciler(c, &testConfig, alertData, testRecipeMap, requestType)
 	assert.NotNil(t, r)
 	assert.Nil(t, err)
 
@@ -120,6 +121,7 @@ func Test_Cleanup(t *testing.T) {
 			Incident string "json:\"incident\""
 			Status   string "json:\"status\""
 			Results  struct {
+				Actions  []string "json:\"actions\""
 				Analysis string   "json:\"analysis\""
 				JSON     string   "json:\"json\""
 				Links    []string "json:\"links\""
@@ -130,7 +132,8 @@ func Test_Cleanup(t *testing.T) {
 		completedRecipe,
 	}
 
-	r, err := NewAlertReconciler(c, &testConfig, alertData, nil)
+	var requestType RequestType = Alert
+	r, err := NewReconciler(c, &testConfig, alertData, nil, requestType)
 	assert.Nil(t, err)
 
 	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(

@@ -14,19 +14,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RequestType enumeration
+type RequestType int
+
+const (
+	Actions RequestType = iota // Action Request Type
+	Alert                      // Alert Request Type
+)
+
 type Reconciler struct {
-	uuid      string
-	config    *Config
-	alertData *map[string]interface{}
-	pubsub    *redis.PubSub
-	recipes   map[string]Recipe
+	uuid        string
+	config      *Config
+	data        *map[string]interface{}
+	pubsub      *redis.PubSub
+	recipes     map[string]Recipe
+	requestType RequestType
 }
 
-// Initialise a reconciler for a specific alert.
-func NewAlertReconciler(
-	c *gin.Context, config *Config, alertData *map[string]interface{}, recipes map[string]Recipe,
+// Initialise a reconciler for a specific alert or for actions
+func NewReconciler(
+	c *gin.Context, config *Config, data *map[string]interface{},
+	recipes map[string]Recipe, requestType RequestType,
 ) (*Reconciler, error) {
-	uuid := (*alertData)["uuid"].(string)
+	uuid := (*data)["uuid"].(string)
 
 	// Subscribe to a new redis channel
 	pubsub := rdb.Subscribe(c, uuid)
@@ -39,11 +49,12 @@ func NewAlertReconciler(
 	}
 
 	return &Reconciler{
-		uuid:      uuid,
-		config:    config,
-		alertData: alertData,
-		pubsub:    pubsub,
-		recipes:   recipes,
+		uuid:        uuid,
+		config:      config,
+		data:        data,
+		pubsub:      pubsub,
+		recipes:     recipes,
+		requestType: requestType,
 	}, nil
 }
 
@@ -52,14 +63,16 @@ func (r *Reconciler) Run() {
 	completedRecipes, err := collectRecipeResult(r)
 	if err != nil {
 		logger.Error("Failed to collect recipe results", zap.Error(err))
+		return
 	}
 
 	// Send received messages to Webex Bot
 	botMessage := IncidentBotMessage{
 		UUID:     r.uuid,
 		Analysis: r.getIncidentAnalysis(completedRecipes),
-		Actions:  "",
+		Actions:  r.getActions(completedRecipes),
 	}
+
 	err = r.postMessageToWebexBot(botMessage)
 	if err != nil {
 		logger.Error("Failed to forward message to Webex Bot", zap.Error(err))
@@ -144,6 +157,17 @@ func (r *Reconciler) getIncidentAnalysis(completedRecipes []Recipe) string {
 		}
 	}
 	return incidentAnalysis
+}
+
+// Retrieve the suggested actions from the completed recipes.
+func (r *Reconciler) getActions(completedRecipes []Recipe) []string {
+	var actions []string
+	for _, recipe := range completedRecipes {
+		if recipe.Execution.Status == "successful" {
+			actions = append(actions, recipe.Execution.Results.Actions...)
+		}
+	}
+	return actions
 }
 
 // Parse recipe results from Redis message.
