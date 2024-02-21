@@ -169,60 +169,79 @@ class DataAggregator(HTTPService):
 
     def _get_alert_rule_from_url(self, url: str):
         """Get alert rule from a URL."""
-        return url.split('/')[-2]
+        return url.split("/")[-2]
 
     def _get_grafana_info(self, data: dict):
         """Get the Grafana dashboard, specific panel and alert rule from the input data."""
         alert = data.get("alert").get("alerts")[0]
-        
-        dashboard_id =  alert.get("panel_id") or self._get_grafana_dashboard_from_url(alert["dashboardURL"])
+
+        dashboard_id = alert.get("panel_id") or self._get_grafana_dashboard_from_url(
+            alert["dashboardURL"]
+        )
         panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
         alert_rule_id = self._get_alert_rule_from_url(alert["generatorURL"])
-        
-        return dashboard_id, panel_id,alert_rule_id
+
+        return dashboard_id, panel_id, alert_rule_id
 
     def get_grafana_info_from_incident(self, incident: Incident):
         """Get a Grafana dashboard."""
-        uuid = incident.uuid
         dashboard_id, panel_id, alert_rule_id = self._get_grafana_info(incident.data)
         url = self.get_source_url("grafana")
         body = {
-            "uuid": uuid,
+            "uuid": incident.uuid,
             "params": {
                 "dashboard_id": dashboard_id,
                 "panel_id": panel_id,
-                "alert_rule_id" : alert_rule_id
+                "alert_rule_id": alert_rule_id,
             },
         }
         return self.post(url, params={}, body=body)
 
-    def get_firing_time(self,incident):
+    def get_firing_time(self, incident):
         alert = incident.data.get("alert").get("alerts")[0]
-        # The startsAt in grafana alert only represents the firing time, actually is the stop time of query 
+        # The startsAt in grafana alert only represents the firing time, actually is the stop time of query
         return alert["startsAt"]
-        
-    def calculate_query_start_time(self,alert_rule,firing_time):
+
+    def calculate_query_start_time(self, alert_rule, firing_time):
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
         alert_query = alert_rule["data"][0]
-        query_time_range = alert_query["relativeTimeRange"]["from"] - alert_query["relativeTimeRange"]["to"]
+        query_time_range = (
+            alert_query["relativeTimeRange"]["from"] - alert_query["relativeTimeRange"]["to"]
+        )
         query_interval = alert_query["model"]["intervalMs"]
         # alert_rule["for"] is the pending time, initially is like "10s" format
-        pending_time = int(re.findall(r'\d+', alert_rule["for"])[0])
-        fmt_start_time = fmt_firing_time - timedelta(seconds=pending_time) - timedelta(seconds=query_time_range) - timedelta(milliseconds=query_interval)
+        pending_time = int(re.findall(r"\d+", alert_rule["for"])[0])
+        fmt_start_time = (
+            fmt_firing_time
+            - timedelta(seconds=pending_time)
+            - timedelta(seconds=query_time_range)
+            - timedelta(milliseconds=query_interval)
+        )
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-    def get_influxdb_records(self, incident: Incident,query): 
+
+    def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
-        uuid = incident.uuid
         url = self.get_source_url("influxdb")
         body = {
-            "uuid": uuid,
+            "uuid": incident.uuid,
             "params": {
                 "bucket": "ciscobucket",
-                "measurement" : query["measurement"],
-                "startTime" : query["start_time"],
-                "stopTime" : query["stop_time"],
+                "measurement": influxdb_query["measurement"],
+                "startTime": influxdb_query["start_time"],
+                "stopTime": influxdb_query["stop_time"],
+            },
+        }
+        return self.post(url, body=body)
+
+    def get_opensearch_records(self, incident: Incident, opensearch_query):
+        """Get influxdb records."""
+        url = self.get_source_url("opensearch")
+        body = {
+            "uuid": incident.uuid,
+            "params": {
+                "field": {"WEBEX_TRACKINGID": opensearch_query["WEBEX_TRACKINGID"]},
+                "index_pattern": "afc30730-c54a-11ee-97eb-f78aebb9cc37",
             },
         }
         return self.post(url, body=body)
