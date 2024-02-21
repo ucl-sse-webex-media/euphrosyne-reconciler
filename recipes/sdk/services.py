@@ -240,7 +240,7 @@ class DataAggregator(HTTPService):
             "uuid": incident.uuid,
             "params": {
                 "field": {"WEBEX_TRACKINGID": opensearch_query["WEBEX_TRACKINGID"]},
-                "index_pattern": "afc30730-c54a-11ee-97eb-f78aebb9cc37",
+                "index_pattern": "669b1c90-bf7e-11ee-80c9-b1988aa88c0f",
             },
         }
         return self.post(url, body=body)
