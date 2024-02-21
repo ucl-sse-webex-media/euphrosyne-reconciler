@@ -3,7 +3,6 @@ import functools
 import json
 import logging
 from enum import Enum
-import traceback
 
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
