@@ -217,7 +217,6 @@ class Recipe:
             self._handler(incident, self)
         except Exception as e:
             logger.error("An error occurred while running the recipe: %s", e)
-
             self.results.status = RecipeStatus.FAILED
             raise
         self._publish_results(self._get_redis_channel(incident))
