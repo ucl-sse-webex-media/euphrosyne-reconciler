@@ -221,7 +221,7 @@ class DataAggregator(HTTPService):
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def get_influxdb_bucket(self, grafana_info):
-        dataSourceInfo = grafana_info["datasource"]["dataSourceInfo"]
+        dataSourceInfo = grafana_info["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement(self, grafana_info):
