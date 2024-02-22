@@ -220,14 +220,14 @@ class DataAggregator(HTTPService):
         )
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def get_influxdb_bucket(self,grafana_info):
+    def get_influxdb_bucket(self, grafana_info):
         dataSourceInfo = grafana_info["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
-    
-    def get_influxdb_measurement(self,grafana_info):
+
+    def get_influxdb_measurement(self, grafana_info):
         alert_rule = grafana_info["alert_rule"]
         return alert_rule["data"][0]["model"]["measurement"]
-    
+
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
         url = self.get_source_url("influxdb")
@@ -241,7 +241,7 @@ class DataAggregator(HTTPService):
             },
         }
         return self.post(url, body=body)
-        
+
     def get_opensearch_records(self, incident: Incident, opensearch_query):
         """Get influxdb records."""
         url = self.get_source_url("opensearch")

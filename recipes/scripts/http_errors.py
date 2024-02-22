@@ -26,7 +26,7 @@ def handler(incident: Incident, recipe: Recipe):
     start_time = aggregator.calculate_query_start_time(grafana_info, firing_time)
 
     influxdb_query = {
-        "bucker" : aggregator.get_influxdb_bucket(grafana_info),
+        "bucker": aggregator.get_influxdb_bucket(grafana_info),
         "measurement": aggregator.get_influxdb_measurement(grafana_info),
         "start_time": start_time,
         "stop_time": firing_time,
@@ -59,7 +59,7 @@ def handler(incident: Incident, recipe: Recipe):
 
     opensearch_record = opensearch_records[webex_tracking_id][0]
     openseach_field = opensearch_record["fields"]
-    
+
     # find the largest percentage of cluster
     cluster_count = {}
     for item in influxdb_records:
@@ -67,11 +67,11 @@ def handler(incident: Incident, recipe: Recipe):
             cluster_count[item["cluster"]] += item["_value"]
         else:
             cluster_count[item["cluster"]] = item["_value"]
-            
+
     percentages = {cluster: (count / error_num) * 100 for cluster, count in cluster_count.items()}
     max_percentage_cluster = max(percentages, key=percentages.get)
     max_percentage_count = cluster_count[max_percentage_cluster]
-    
+
     # format analysis
     analysis = (
         f"From {start_time} to {firing_time}, there were {error_num} pieces of"
@@ -81,21 +81,22 @@ def handler(incident: Incident, recipe: Recipe):
         f"{max_percentage_count} percentage of alerts happens in cluster:"
         f" {max_percentage_cluster}.\n"
     )
-    
+
     analysis += "Info: \n"
     # can be made as a method later
     analysis += (
         f"uri: {main_error['uri']}\nservicename: {main_error['servicename']}\nenvironment:"
         f" {main_error['environment']}\n"
     )
-    
-    analysis += f"message: {opensearch_record['message']}\nlog: {filtered_logs}\n"
+
+    analysis += f"message: {opensearch_record['message']}\n"
 
     if openseach_field.get("stack_trace") is not None:
         stack_trace = openseach_field["stack_trace"].split("\n")
 
         # filter all logs that contain com.cisco.wx2
         filtered_logs = "\n".join([entry for entry in stack_trace if "com.cisco.wx2" in entry])
+        analysis += f"logs: {filtered_logs}\n"
 
     print(analysis)
 
