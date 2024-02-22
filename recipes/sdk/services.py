@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
+from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError,ApiResError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,10 @@ class DataAggregator(HTTPService):
             raise DataAggregatorHTTPError(e)
         return res
 
+    def _check_api_res_error(self,res):
+        if res.get("error") is not None:
+            raise ApiResError(res.get("error"))
+        
     def _get_grafana_dashboard_from_url(self, url: str):
         """Get a Grafana dashboard ID from a URL."""
         return url.rsplit("/", 1)[-1].split("?")[0]
@@ -194,7 +198,9 @@ class DataAggregator(HTTPService):
                 "alert_rule_id": alert_rule_id,
             },
         }
-        return self.post(url, params={}, body=body)
+        res = self.post(url, body=body)
+        self._check_api_res_error(res)
+        return res
 
     def get_firing_time(self, incident):
         alert = incident.data.get("alert").get("alerts")[0]
@@ -240,7 +246,9 @@ class DataAggregator(HTTPService):
                 "stopTime": influxdb_query["stop_time"],
             },
         }
-        return self.post(url, body=body)
+        res = self.post(url, body=body)
+        self._check_api_res_error(res)
+        return res
 
     def get_opensearch_index_pattern_url(self, garfana_info):
         links = garfana_info["detailPanel"]["fieldConfig"]["links"]
@@ -266,4 +274,6 @@ class DataAggregator(HTTPService):
                 "index_pattern": opensearch_query["index_pattern"],
             },
         }
-        return self.post(url, body=body)
+        res = self.post(url, body=body)
+        self._check_api_res_error(res)
+        return res

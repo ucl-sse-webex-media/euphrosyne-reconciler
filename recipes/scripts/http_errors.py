@@ -1,6 +1,6 @@
 import logging
 
-from sdk.errors import DataAggregatorHTTPError
+from sdk.errors import DataAggregatorHTTPError,ApiResError
 from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeStatus
 
@@ -18,10 +18,10 @@ def handler(incident: Incident, recipe: Recipe):
         grafana_info = aggregator.get_grafana_info_from_incident(incident)
         if grafana_info.get("error") is not None:
             raise Exception(grafana_info.get("error"))
-    except DataAggregatorHTTPError as e:
+    except (DataAggregatorHTTPError,ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
-        return
+        raise
 
     # query for influxdb
     firing_time = aggregator.get_firing_time(incident)
@@ -36,12 +36,10 @@ def handler(incident: Incident, recipe: Recipe):
 
     try:
         influxdb_records = aggregator.get_influxdb_records(incident, influxdb_query)
-        if influxdb_records.get("error") is not None:
-            raise Exception(influxdb_records.get("error"))
-    except DataAggregatorHTTPError as e:
+    except (DataAggregatorHTTPError,ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
-        return
+        raise
 
     # _field for error type
     # _value for count
@@ -60,12 +58,10 @@ def handler(incident: Incident, recipe: Recipe):
     }
     try:
         opensearch_records = aggregator.get_opensearch_records(incident, opensearch_query)
-        if opensearch_records.get("error") is not None:
-            raise Exception(opensearch_records.get("error"))
-    except DataAggregatorHTTPError as e:
+    except(DataAggregatorHTTPError,ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
-        return
+        raise
 
     opensearch_record = opensearch_records[webex_tracking_id][0]
     openseach_field = opensearch_record["fields"]
@@ -102,7 +98,6 @@ def handler(incident: Incident, recipe: Recipe):
 
     if openseach_field.get("stack_trace") is not None:
         stack_trace = openseach_field["stack_trace"].split("\n")
-
         # filter all logs that contain com.cisco.wx2
         filtered_logs = "\n".join([entry for entry in stack_trace if "com.cisco.wx2" in entry])
         analysis += f"logs: {filtered_logs}\n"

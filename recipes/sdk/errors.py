@@ -19,7 +19,6 @@ class DataAggregatorHTTPError(ServiceError):
             }
         }
 
-
 class JiraHTTPError(ServiceError):
     def __init__(self, original_exception):
         self.original_exception = original_exception
@@ -33,6 +32,7 @@ class JiraHTTPError(ServiceError):
         }
 
 
+
 class JiraParsingError(ValueError):
     """Error when parsing a Jira issue creation request."""
 
@@ -41,5 +41,11 @@ class JiraParsingError(ValueError):
 
 class IncidentParsingError(ValueError):
     """Error when parsing an incident."""
+
+    pass
+
+
+class ApiResError(ValueError):
+    """Error in the api response"""
 
     pass
