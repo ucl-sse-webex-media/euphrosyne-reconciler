@@ -156,6 +156,7 @@ class DataAggregator(HTTPService):
             res = super().post(args, **kwargs)
         except requests.exceptions.RequestException as e:
             raise DataAggregatorHTTPError(e)
+        self._check_api_res_error(res)
         return res
 
     def _check_api_res_error(self,res):
@@ -198,9 +199,7 @@ class DataAggregator(HTTPService):
                 "alert_rule_id": alert_rule_id,
             },
         }
-        res = self.post(url, body=body)
-        self._check_api_res_error(res)
-        return res
+        return self.post(url, body=body)
 
     def get_firing_time(self, incident):
         alert = incident.data.get("alert").get("alerts")[0]
@@ -246,9 +245,7 @@ class DataAggregator(HTTPService):
                 "stopTime": influxdb_query["stop_time"],
             },
         }
-        res = self.post(url, body=body)
-        self._check_api_res_error(res)
-        return res
+        return self.post(url, body=body)
 
     def get_opensearch_index_pattern_url(self, garfana_info):
         links = garfana_info["detailPanel"]["fieldConfig"]["links"]
@@ -274,6 +271,4 @@ class DataAggregator(HTTPService):
                 "index_pattern": opensearch_query["index_pattern"],
             },
         }
-        res = self.post(url, body=body)
-        self._check_api_res_error(res)
-        return res
+        return self.post(url, body=body)
