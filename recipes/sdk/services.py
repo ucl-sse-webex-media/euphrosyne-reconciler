@@ -225,7 +225,7 @@ class DataAggregator(HTTPService):
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement(self, grafana_info):
-        alert_rule = grafana_info["alert_rule"]
+        alert_rule = grafana_info["alertRule"]
         return alert_rule["data"][0]["model"]["measurement"]
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
@@ -241,6 +241,20 @@ class DataAggregator(HTTPService):
             },
         }
         return self.post(url, body=body)
+
+    def get_opensearch_index_pattern_url(self, garfana_info):
+        links = garfana_info["detailPanel"]["fieldConfig"]["links"]
+        urls = [item["url"] for item in links]
+        for url in urls:
+            if "indexPattern" in url:
+                startStr = "indexPattern:'"
+                start_index = url.find(startStr) + len(startStr) + 1
+                end_index = url.find("'", start_index)
+                index_pattern_url = url[start_index:end_index]
+                print(index_pattern_url)
+                return index_pattern_url
+
+        return ""
 
     def get_opensearch_records(self, incident: Incident, opensearch_query):
         """Get influxdb records."""

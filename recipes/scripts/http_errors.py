@@ -26,7 +26,7 @@ def handler(incident: Incident, recipe: Recipe):
     start_time = aggregator.calculate_query_start_time(grafana_info, firing_time)
 
     influxdb_query = {
-        "bucker": aggregator.get_influxdb_bucket(grafana_info),
+        "bucket": aggregator.get_influxdb_bucket(grafana_info),
         "measurement": aggregator.get_influxdb_measurement(grafana_info),
         "start_time": start_time,
         "stop_time": firing_time,
@@ -48,8 +48,12 @@ def handler(incident: Incident, recipe: Recipe):
     main_error = sorted_records[0]
 
     # query for opensearch
+    # index_pattern_url = aggregator.get_opensearch_index_pattern_url(grafana_info)
     webex_tracking_id = main_error["webextrackingID"]
-    opensearch_query = {"WEBEX_TRACKINGID": [webex_tracking_id]}
+    opensearch_query = {
+        "WEBEX_TRACKINGID": [webex_tracking_id],
+        "index_pattern": "afc30730-c54a-11ee-97eb-f78aebb9cc37",
+    }
     try:
         opensearch_records = aggregator.get_opensearch_records(incident, opensearch_query)
     except DataAggregatorHTTPError as e:
@@ -78,7 +82,7 @@ def handler(incident: Incident, recipe: Recipe):
         f" {main_error['_field']} http errors.\n"
     )
     analysis += (
-        f"{max_percentage_count} percentage of alerts happens in cluster:"
+        f"{max_percentage_count} alerts happens in cluster:"
         f" {max_percentage_cluster}.\n"
     )
 
