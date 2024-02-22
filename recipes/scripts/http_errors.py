@@ -13,6 +13,7 @@ def handler(incident: Incident, recipe: Recipe):
 
     results, aggregator = recipe.results, recipe.aggregator
 
+    # query for grafana
     try:
         grafana_info = aggregator.get_grafana_info_from_incident(incident)
     except DataAggregatorHTTPError as e:
@@ -20,13 +21,13 @@ def handler(incident: Incident, recipe: Recipe):
         results.status = RecipeStatus.FAILED
         return
 
+    # query for influxdb
     firing_time = aggregator.get_firing_time(incident)
-    alert_rule = grafana_info["alertRule"]
-
-    start_time = aggregator.calculate_query_start_time(alert_rule, firing_time)
+    start_time = aggregator.calculate_query_start_time(grafana_info, firing_time)
 
     influxdb_query = {
-        "measurement": "HTTPlogs",
+        "bucker" : aggregator.get_influxdb_bucket(grafana_info),
+        "measurement": aggregator.get_influxdb_measurement(grafana_info),
         "start_time": start_time,
         "stop_time": firing_time,
     }
@@ -43,23 +44,10 @@ def handler(incident: Incident, recipe: Recipe):
     error_num = sum(item["_value"] for item in influxdb_records)
 
     sorted_records = sorted(influxdb_records, key=lambda x: x["_value"], reverse=True)
+    # find the error with largest count
     main_error = sorted_records[0]
-    analysis = (
-        f"From {start_time} to {firing_time}, there were {error_num} pieces of"
-        f" {main_error['_field']} http errors.\n"
-    )
-    analysis += (
-        f"{(main_error['_value'] / error_num) * 100} percentage of alerts happens in cluster:"
-        f" {main_error['cluster']}.\n"
-    )
 
-    analysis += "Info: \n"
-    # can be made as a method later
-    analysis += (
-        f"uri: {main_error['uri']}\nservicename: {main_error['servicename']}\nenvironment:"
-        f" {main_error['environment']}\n"
-    )
-
+    # query for opensearch
     webex_tracking_id = main_error["webextrackingID"]
     opensearch_query = {"WEBEX_TRACKINGID": [webex_tracking_id]}
     try:
@@ -71,14 +59,46 @@ def handler(incident: Incident, recipe: Recipe):
 
     opensearch_record = opensearch_records[webex_tracking_id][0]
     openseach_field = opensearch_record["fields"]
+    
+    # find the largest percentage of cluster
+    cluster_count = {}
+    for item in influxdb_records:
+        if item["cluster"] in cluster_count:
+            cluster_count[item["cluster"]] += item["_value"]
+        else:
+            cluster_count[item["cluster"]] = item["_value"]
+            
+    percentages = {cluster: (count / error_num) * 100 for cluster, count in cluster_count.items()}
+    max_percentage_cluster = max(percentages, key=percentages.get)
+    max_percentage_count = cluster_count[max_percentage_cluster]
+    
+    # format analysis
+    analysis = (
+        f"From {start_time} to {firing_time}, there were {error_num} pieces of"
+        f" {main_error['_field']} http errors.\n"
+    )
+    analysis += (
+        f"{max_percentage_count} percentage of alerts happens in cluster:"
+        f" {max_percentage_cluster}.\n"
+    )
+    
+    analysis += "Info: \n"
+    # can be made as a method later
+    analysis += (
+        f"uri: {main_error['uri']}\nservicename: {main_error['servicename']}\nenvironment:"
+        f" {main_error['environment']}\n"
+    )
+    
+    analysis += f"message: {opensearch_record['message']}\nlog: {filtered_logs}\n"
+
     if openseach_field.get("stack_trace") is not None:
         stack_trace = openseach_field["stack_trace"].split("\n")
 
         # filter all logs that contain com.cisco.wx2
         filtered_logs = "\n".join([entry for entry in stack_trace if "com.cisco.wx2" in entry])
 
-        analysis += f"message: {opensearch_record['message']}\nlog: {filtered_logs}\n"
     print(analysis)
+
     results.analysis = analysis
     results.status = RecipeStatus.SUCCESSFUL
 

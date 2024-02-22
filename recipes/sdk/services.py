@@ -201,7 +201,8 @@ class DataAggregator(HTTPService):
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
 
-    def calculate_query_start_time(self, alert_rule, firing_time):
+    def calculate_query_start_time(self, grafana_info, firing_time):
+        alert_rule = grafana_info["alertRule"]
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
         alert_query = alert_rule["data"][0]
@@ -219,20 +220,28 @@ class DataAggregator(HTTPService):
         )
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    def get_influxdb_bucket(self,grafana_info):
+        dataSourceInfo = grafana_info["dataSourceInfo"]
+        return dataSourceInfo["jsonData"]["dbName"]
+    
+    def get_influxdb_measurement(self,grafana_info):
+        alert_rule = grafana_info["alert_rule"]
+        return alert_rule["data"][0]["model"]["measurement"]
+    
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
         url = self.get_source_url("influxdb")
         body = {
             "uuid": incident.uuid,
             "params": {
-                "bucket": "ciscobucket",
+                "bucket": influxdb_query["bucket"],
                 "measurement": influxdb_query["measurement"],
                 "startTime": influxdb_query["start_time"],
                 "stopTime": influxdb_query["stop_time"],
             },
         }
         return self.post(url, body=body)
-
+        
     def get_opensearch_records(self, incident: Incident, opensearch_query):
         """Get influxdb records."""
         url = self.get_source_url("opensearch")
@@ -240,7 +249,7 @@ class DataAggregator(HTTPService):
             "uuid": incident.uuid,
             "params": {
                 "field": {"WEBEX_TRACKINGID": opensearch_query["WEBEX_TRACKINGID"]},
-                "index_pattern": "669b1c90-bf7e-11ee-80c9-b1988aa88c0f",
+                "index_pattern": opensearch_query["index_pattern"],
             },
         }
         return self.post(url, body=body)
