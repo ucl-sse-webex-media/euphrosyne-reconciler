@@ -137,7 +137,7 @@ class Jira(HTTPService):
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://192.168.1.105:8080"
+    URL = "http://localhost:9527"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
     def __init__(self, aggregator_address):
@@ -160,7 +160,7 @@ class DataAggregator(HTTPService):
         return res
 
     def _check_api_res_error(self,res):
-        if res.get("error") is not None:
+        if isinstance(res, dict) and res.get("error") is not None:
             raise ApiResError(res.get("error"))
         
     def _get_grafana_dashboard_from_url(self, url: str):
@@ -227,11 +227,18 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_bucket(self, grafana_info):
         dataSourceInfo = grafana_info["dataSourceInfo"]
+        
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement(self, grafana_info):
         alert_rule = grafana_info["alertRule"]
-        return alert_rule["data"][0]["model"]["measurement"]
+        query = alert_rule["data"][0]["model"]["query"]
+        match = re.search(r'FROM\s+"([^"]+)"\s+WHERE', query)
+        if match:
+            result = match.group(1)
+        else:
+            result = ""
+        return result
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
