@@ -16,6 +16,8 @@ def handler(incident: Incident, recipe: Recipe):
     # query for grafana
     try:
         grafana_info = aggregator.get_grafana_info_from_incident(incident)
+        if grafana_info.get("error") is not None:
+            raise Exception(grafana_info.get("error"))
     except DataAggregatorHTTPError as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
@@ -34,6 +36,8 @@ def handler(incident: Incident, recipe: Recipe):
 
     try:
         influxdb_records = aggregator.get_influxdb_records(incident, influxdb_query)
+        if influxdb_records.get("error") is not None:
+            raise Exception(influxdb_records.get("error"))
     except DataAggregatorHTTPError as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
@@ -56,6 +60,8 @@ def handler(incident: Incident, recipe: Recipe):
     }
     try:
         opensearch_records = aggregator.get_opensearch_records(incident, opensearch_query)
+        if opensearch_records.get("error") is not None:
+            raise Exception(opensearch_records.get("error"))
     except DataAggregatorHTTPError as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
@@ -82,8 +88,7 @@ def handler(incident: Incident, recipe: Recipe):
         f" {main_error['_field']} http errors.\n"
     )
     analysis += (
-        f"{max_percentage_count} alerts happens in cluster:"
-        f" {max_percentage_cluster}.\n"
+        f"{max_percentage_count} alerts happens in cluster:" f" {max_percentage_cluster}.\n"
     )
 
     analysis += "Info: \n"
