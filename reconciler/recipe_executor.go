@@ -169,7 +169,7 @@ func createJob(
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								"sleep 100 &" + buildRecipeCommand(recipe.Config, config),
+								buildRecipeCommand(recipe.Config, config),
 							},
 							Env: []corev1.EnvVar{
 								{
