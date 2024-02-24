@@ -224,6 +224,7 @@ func (r *Reconciler) deleteCompletedJobsWithLabels(
 	completedRecipes []Recipe, labels map[string]string,
 ) error {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
+	cmClient := clientset.CoreV1().ConfigMaps(jobNamespace)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
@@ -243,6 +244,12 @@ func (r *Reconciler) deleteCompletedJobsWithLabels(
 		)
 		if err != nil {
 
+			return err
+		}
+		err = cmClient.DeleteCollection(
+			context.TODO(), deleteOptions, metav1.ListOptions{LabelSelector: labelSelector},
+		)
+		if err != nil {
 			return err
 		}
 	}

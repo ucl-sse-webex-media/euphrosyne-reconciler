@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -94,6 +93,34 @@ func createJob(
 	recipeName string, recipe Recipe, data *map[string]interface{}, config *Config,
 ) (*batchv1.Job, error) {
 	jobClient := clientset.BatchV1().Jobs(jobNamespace)
+	cmClient := clientset.CoreV1().ConfigMaps(jobNamespace)
+
+	//Marshal the data into JSON format
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	//Create the ConfigMap for data
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "alert-configmap-",
+			Namespace:    jobNamespace,
+			Labels: map[string]string{
+				"app":    "euphrosyne",
+				"recipe": recipeName,
+				"uuid":   (*data)["uuid"].(string),
+			},
+		},
+		Data: map[string]string{
+			"alert.json": string(dataJSON),
+		},
+	}
+
+	cm, err = cmClient.Create(context.TODO(), cm, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
 
 	// Define the Job object
 	job := &batchv1.Job{
@@ -119,14 +146,30 @@ func createJob(
 					},
 				},
 				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "alert-data-volume",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name},
+								},
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "recipe-container",
 							Image: recipe.Config.Image,
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "alert-data-volume",
+									MountPath: "/app/data", // Mount path inside the container
+								},
+							},
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								buildRecipeCommand(recipe.Config, config, data),
+								"sleep 100 &" + buildRecipeCommand(recipe.Config, config),
 							},
 							Env: []corev1.EnvVar{
 								{
@@ -172,7 +215,7 @@ func createJob(
 		},
 	}
 
-	job, err := jobClient.Create(context.TODO(), job, metav1.CreateOptions{})
+	job, err = jobClient.Create(context.TODO(), job, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -228,21 +271,12 @@ func createJobsForActions(
 
 // Build Recipe command.
 func buildRecipeCommand(
-	recipeConfig *RecipeConfig, config *Config, data *map[string]interface{},
+	recipeConfig *RecipeConfig, config *Config,
 ) string {
-	dataStr, err := json.Marshal(data)
-	if err != nil {
-		logger.Error("Failed to convert input data to string", zap.Error(err))
-	}
-
-	// Escape the quotes inside the JSON string
-	escapedDataStr := strings.ReplaceAll(string(dataStr), `"`, `\"`)
-
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
 	recipeCommand += fmt.Sprintf("--aggregator-address '%v' ", config.AggregatorAddress)
 	recipeCommand += fmt.Sprintf("--redis-address '%v' ", config.RedisAddress)
-	recipeCommand += fmt.Sprintf("--data \"%v\" ", escapedDataStr)
 	return recipeCommand
 }
 

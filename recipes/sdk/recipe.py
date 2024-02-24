@@ -12,7 +12,7 @@ from sdk.incident import Incident
 from sdk.services import DataAggregator
 
 logger = logging.getLogger(__name__)
-
+json_file_path = "/app/data/alert.json"
 
 class RecipeStatus(Enum):
     """Euphrosyne Reconciler Recipe Status."""
@@ -127,10 +127,25 @@ class Recipe:
 
         self.aggregator = None
         self.results = RecipeResults(name=self._name)
-
     @property
     def name(self):
         return self._name
+    
+    @staticmethod
+    def loadJsonFile(filepath:str):
+        """Load json data from file"""
+        try:
+            with open(filepath, "r") as f:
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError:
+                    raise IncidentParsingError("Invalid input provided. Please provide valid JSON input.")
+        except FileNotFoundError:
+            raise IncidentParsingError("File not found. Please ensure the file exists.")
+        except IOError as e:
+            raise IncidentParsingError(f"Error reading the file: {str(e)}")
+        return data
+
 
     @staticmethod
     def _parse_input_data(func):
@@ -139,28 +154,22 @@ class Recipe:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             parser = argparse.ArgumentParser(description="A Euphrosyne Reconciler recipe.")
-            parser.add_argument("--data", type=str, help="Recipe input data")
+            parser.add_argument("--data", type=str, help="Recipe input data") #Currently not used
             parser.add_argument("--aggregator-address", type=str, help="Data Aggregator address")
             parser.add_argument("--redis-address", type=str, help="Redis address")
             parsed_args = parser.parse_args()
 
-            if parsed_args.data:
-                try:
-                    data = json.loads(parsed_args.data)
-                    cli_config = {
+            try:
+                data=Recipe.loadJsonFile(json_file_path)
+                cli_config = {
                         "aggregator_address": parsed_args.aggregator_address,
                         "redis_address": parsed_args.redis_address,
                     }
-                    return func(self, Incident.from_dict(data), cli_config, *args, **kwargs)
-                except json.JSONDecodeError:
+                return func(self, Incident.from_dict(data), cli_config, *args, **kwargs)
+            except json.JSONDecodeError:
                     raise IncidentParsingError(
                         "Invalid input provided. Please provide valid JSON input."
                     )
-            else:
-                raise IncidentParsingError(
-                    "No input provided. Please provide input using the --data option."
-                )
-
         return wrapper
 
     def _get_redis_channel(self, incident: Incident):
