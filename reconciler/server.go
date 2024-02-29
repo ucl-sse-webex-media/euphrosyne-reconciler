@@ -65,7 +65,7 @@ func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
 	if _, ok := (*message)["uuid"]; ok {
 		listOptions.LabelSelector += fmt.Sprintf(",uuid=%s", (*message)["uuid"])
 	}
-	jobList, err := clientset.BatchV1().Jobs(jobNamespace).List(context.TODO(), listOptions)
+	jobList, err := clientset.BatchV1().Jobs(recipeNamespace).List(context.TODO(), listOptions)
 	if err != nil {
 		logger.Error("Failed to list K8s Jobs", zap.Error(err))
 		return nil, err

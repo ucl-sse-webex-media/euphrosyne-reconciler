@@ -98,7 +98,6 @@ class Jira(HTTPService):
 
     def create_issue(self, data: dict):
         """Create a Jira issue."""
-        data = data["data"]
         summary = data.get("summary")
         if not summary:
             raise JiraParsingError("Summary needs to be provided.")

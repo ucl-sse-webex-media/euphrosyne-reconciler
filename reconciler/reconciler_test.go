@@ -13,8 +13,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Test Reconciler.
+func TestReconciler(t *testing.T) {
+	// Check whether the test namespace exists
+	_, err := clientset.CoreV1().Namespaces().Get(
+		context.TODO(), testNamespace, metav1.GetOptions{},
+	)
+	if err != nil {
+		createTestNamespace()
+	}
+	defer deleteNamespace(testNamespace)
+
+	testCollectRecipeResult(t)
+
+	testCleanup(t)
+}
+
 // Test that the reconciler can collect the results of completed recipes from Redis.
-func Test_CollectRecipeResult(t *testing.T) {
+func testCollectRecipeResult(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -76,7 +92,7 @@ func Test_CollectRecipeResult(t *testing.T) {
 }
 
 // Test that created resources are cleaned up successfully.
-func Test_Cleanup(t *testing.T) {
+func testCleanup(t *testing.T) {
 	testConfig := Config{
 		RecipeTimeout: 2,
 	}
@@ -90,7 +106,7 @@ func Test_Cleanup(t *testing.T) {
 				"recipe": "test-job",
 				"uuid":   (*alertData)["uuid"].(string),
 			},
-			Namespace: jobNamespace,
+			Namespace: testNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -115,6 +131,21 @@ func Test_Cleanup(t *testing.T) {
 		},
 	}
 
+	// a ConfigMap that is expected to be deleted
+	configMapObj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				"app":  "euphrosyne",
+				"uuid": (*alertData)["uuid"].(string),
+			},
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+
 	completedRecipe := Recipe{
 		Execution: &struct {
 			Name     string "json:\"name\""
@@ -136,10 +167,16 @@ func Test_Cleanup(t *testing.T) {
 	r, err := NewReconciler(c, &testConfig, alertData, nil, requestType)
 	assert.Nil(t, err)
 
-	job, err := clientset.BatchV1().Jobs(testJobNamespace).Create(
+	job, err := clientset.BatchV1().Jobs(testNamespace).Create(
 		context.TODO(), jobObj, metav1.CreateOptions{},
 	)
 	assert.NotNil(t, job)
+	assert.Nil(t, err)
+
+	configMap, err := clientset.CoreV1().ConfigMaps(testNamespace).Create(
+		context.TODO(), configMapObj, metav1.CreateOptions{},
+	)
+	assert.NotNil(t, configMap)
 	assert.Nil(t, err)
 
 	for {
@@ -150,13 +187,48 @@ func Test_Cleanup(t *testing.T) {
 		assert.Nil(t, err)
 		if getJob.Status.Succeeded > 0 {
 			r.Cleanup(completedRecipes)
-			getJob, err = clientset.BatchV1().Jobs(testNamespace).Get(
-				context.TODO(), job.Name, metav1.GetOptions{},
-			)
-			assert.Equal(t, true, errors.IsNotFound(err))
-			assert.Equal(t, "", getJob.Name)
 			break
 		}
 		time.Sleep(1 * time.Second)
+	}
+
+	// Set a timeout for waiting
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+JobLoop:
+	// Wait until the Job is deleted
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("Timeout waiting for Job deletion")
+		default:
+			getJob, err := clientset.BatchV1().Jobs(testNamespace).Get(
+				context.TODO(), job.Name, metav1.GetOptions{},
+			)
+			if errors.IsNotFound(err) {
+				assert.Equal(t, "", getJob.Name)
+				break JobLoop
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+ConfigMapLoop:
+	// Wait until the ConfigMap is deleted
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("Timeout waiting for ConfigMap deletion")
+		default:
+			getConfigMap, err := clientset.CoreV1().ConfigMaps(testNamespace).Get(
+				context.TODO(), configMap.Name, metav1.GetOptions{},
+			)
+			if errors.IsNotFound(err) {
+				assert.Equal(t, "", getConfigMap.Name)
+				break ConfigMapLoop
+			}
+			time.Sleep(1 * time.Second)
+		}
 	}
 }

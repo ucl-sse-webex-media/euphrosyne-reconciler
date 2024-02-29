@@ -14,9 +14,15 @@ import (
 )
 
 var (
-	configMapNamespace = "default"
-	configMapName      = "orpheus-operator-recipes"
-	jobNamespace       = "default"
+	recipeNamespace     = "default"
+	reconcilerNamespace = "default"
+	configMapName       = "orpheus-operator-recipes"
+)
+
+const (
+	configMapMountPath = "/app"
+	configMapFileName  = "data.json"
+	configMapFilePath  = configMapMountPath + "/" + configMapFileName
 )
 
 // Initialise and run the recipe executor.
@@ -31,6 +37,8 @@ func StartRecipeExecutor(
 	}
 	logger.Info("Retrieved recipes from ConfigMap", zap.Any("recipes", recipes))
 
+	uuid := (*data)["uuid"].(string)
+
 	reconciler, err := NewReconciler(c, config, data, recipes, requestType)
 	if err != nil {
 		logger.Error("Failed to create reconciler", zap.Error(err))
@@ -38,13 +46,13 @@ func StartRecipeExecutor(
 	}
 
 	if requestType == Actions {
-		err = createJobsForActions(recipes, data, config)
+		err = runActionRecipes(uuid, recipes, data, config)
 		if err != nil {
 			logger.Error("Failed to create jobs for Action", zap.Error(err))
 			return
 		}
 	} else if requestType == Alert {
-		err = createJobsForAlert(recipes, data, config)
+		err = runDebuggingRecipes(uuid, recipes, data, config)
 		if err != nil {
 			logger.Error("Failed to create jobs for Alert", zap.Error(err))
 			return
@@ -60,7 +68,7 @@ func StartRecipeExecutor(
 func getRecipesFromConfigMap(
 	requestType RequestType, filterEnabled bool,
 ) (map[string]Recipe, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(configMapNamespace).Get(
+	configMap, err := clientset.CoreV1().ConfigMaps(reconcilerNamespace).Get(
 		context.TODO(), configMapName, metav1.GetOptions{},
 	)
 	if err != nil {
@@ -88,12 +96,9 @@ func getRecipesFromConfigMap(
 	return recipeMap, nil
 }
 
-// Create a Kubernetes Job to execute a recipe.
-func createJob(
-	recipeName string, recipe Recipe, data *map[string]interface{}, config *Config,
-) (*batchv1.Job, error) {
-	jobClient := clientset.BatchV1().Jobs(jobNamespace)
-	cmClient := clientset.CoreV1().ConfigMaps(jobNamespace)
+// Create a Kubernetes ConfigMap for the recipe data.
+func createConfigMap(data *map[string]interface{}, uuid string) (*corev1.ConfigMap, error) {
+	cmClient := clientset.CoreV1().ConfigMaps(recipeNamespace)
 
 	//Marshal the data into JSON format
 	dataJSON, err := json.Marshal(data)
@@ -104,16 +109,15 @@ func createJob(
 	//Create the ConfigMap for data
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "alert-configmap-",
-			Namespace:    jobNamespace,
+			GenerateName: "euphrosyne-recipes-",
+			Namespace:    recipeNamespace,
 			Labels: map[string]string{
-				"app":    "euphrosyne",
-				"recipe": recipeName,
-				"uuid":   (*data)["uuid"].(string),
+				"app":  "euphrosyne",
+				"uuid": uuid,
 			},
 		},
 		Data: map[string]string{
-			"alert.json": string(dataJSON),
+			configMapFileName: string(dataJSON),
 		},
 	}
 
@@ -121,6 +125,17 @@ func createJob(
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Info("ConfigMap created successfully", zap.String("configMapName", cm.Name))
+
+	return cm, nil
+}
+
+// Create a Kubernetes Job to execute a recipe.
+func createJob(
+	recipeName string, recipe Recipe, uuid string, cmName string, config *Config,
+) (*batchv1.Job, error) {
+	jobClient := clientset.BatchV1().Jobs(recipeNamespace)
 
 	// Define the Job object
 	job := &batchv1.Job{
@@ -132,9 +147,9 @@ func createJob(
 			Labels: map[string]string{
 				"app":    "euphrosyne",
 				"recipe": recipeName,
-				"uuid":   (*data)["uuid"].(string),
+				"uuid":   uuid,
 			},
-			Namespace: jobNamespace,
+			Namespace: recipeNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -142,16 +157,18 @@ func createJob(
 					Labels: map[string]string{
 						"app":    "euphrosyne",
 						"recipe": recipeName,
-						"uuid":   (*data)["uuid"].(string),
+						"uuid":   uuid,
 					},
 				},
 				Spec: corev1.PodSpec{
 					Volumes: []corev1.Volume{
 						{
-							Name: "alert-data-volume",
+							Name: "incident-data-volume",
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name},
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: cmName,
+									},
 								},
 							},
 						},
@@ -162,8 +179,8 @@ func createJob(
 							Image: recipe.Config.Image,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "alert-data-volume",
-									MountPath: "/app/data", // Mount path inside the container
+									Name:      "incident-data-volume",
+									MountPath: configMapMountPath,
 								},
 							},
 							Command: []string{
@@ -215,7 +232,7 @@ func createJob(
 		},
 	}
 
-	job, err = jobClient.Create(context.TODO(), job, metav1.CreateOptions{})
+	job, err := jobClient.Create(context.TODO(), job, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -225,13 +242,18 @@ func createJob(
 	return job, nil
 }
 
-// Create Jobs to execute a list of recipes.
-func createJobsForAlert(
-	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
+// Create Jobs to execute a list of debugging recipes.
+func runDebuggingRecipes(
+	uuid string, recipes map[string]Recipe, data *map[string]interface{}, config *Config,
 ) error {
+	cm, err := createConfigMap(data, uuid)
+	if err != nil {
+		logger.Error("Failed to create ConfigMap", zap.Error(err))
+		return err
+	}
 	// Create a Job for each recipe
 	for recipeName, recipe := range recipes {
-		_, err := createJob(recipeName, recipe, data, config)
+		_, err := createJob(recipeName, recipe, uuid, cm.Name, config)
 		if err != nil {
 			logger.Error("Failed to create K8s Job", zap.Error(err))
 			// FIXME: Handle the error as needed
@@ -240,13 +262,11 @@ func createJobsForAlert(
 	return nil
 }
 
-// Create Jobs for the actions in the Webex Bot request.
-func createJobsForActions(
-	recipes map[string]Recipe, data *map[string]interface{}, config *Config,
+// Create Jobs to execute a list of action recipes.
+func runActionRecipes(
+	uuid string, recipes map[string]Recipe, data *map[string]interface{}, config *Config,
 ) error {
-	var actions []Action
-	var err error
-	actions, err = parseActionData(data)
+	actions, err := parseActionData(data)
 	if err != nil {
 		logger.Error("Failed to parse actions", zap.Error(err))
 		return err
@@ -255,11 +275,17 @@ func createJobsForActions(
 	for _, action := range actions {
 		_, ok := recipes[action.Name]
 		if ok {
-			wrappedData := map[string]interface{}{
-				"data": action.Data,
-				"uuid": (*data)["uuid"].(string),
+			actionData := make(map[string]interface{})
+			for k, v := range action.Data {
+				actionData[k] = v
 			}
-			_, err := createJob(action.Name, recipes[action.Name], &wrappedData, config)
+			actionData["uuid"] = uuid
+			cm, err := createConfigMap(&actionData, uuid)
+			if err != nil {
+				logger.Error("Failed to create ConfigMap", zap.Error(err))
+				return err
+			}
+			_, err = createJob(action.Name, recipes[action.Name], uuid, cm.Name, config)
 			if err != nil {
 				logger.Error("Failed to create K8s Job", zap.Error(err))
 				// FIXME: Handle the error as needed
@@ -275,6 +301,7 @@ func buildRecipeCommand(
 ) string {
 	var recipeCommand string
 	recipeCommand += fmt.Sprintf("%v ", recipeConfig.Entrypoint)
+	recipeCommand += fmt.Sprintf("--data-file-path '%v' ", configMapFilePath)
 	recipeCommand += fmt.Sprintf("--aggregator-address '%v' ", config.AggregatorAddress)
 	recipeCommand += fmt.Sprintf("--redis-address '%v' ", config.RedisAddress)
 	return recipeCommand
