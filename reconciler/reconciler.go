@@ -217,22 +217,30 @@ func (r *Reconciler) Cleanup(completedRecipes []Recipe) {
 	if err != nil {
 		logger.Error("Failed to delete completed Jobs", zap.Error(err))
 	}
+	err = r.deleteConfigMapsWithLabels(labels)
+	if err != nil {
+		logger.Error("Failed to delete ConfigMaps", zap.Error(err))
+	}
 }
 
 // Delete completed Kubernetes Jobs with the specified labels.
 func (r *Reconciler) deleteCompletedJobsWithLabels(
 	completedRecipes []Recipe, labels map[string]string,
 ) error {
-	jobClient := clientset.BatchV1().Jobs(jobNamespace)
+	jobClient := clientset.BatchV1().Jobs(recipeNamespace)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
 		PropagationPolicy: &propagationPolicy,
 	}
 
+	labelsCopy := make(map[string]string, len(labels))
+	for k, v := range labels {
+		labelsCopy[k] = v
+	}
 	for _, recipe := range completedRecipes {
-		labels["recipe"] = recipe.Execution.Name
-		labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
+		labelsCopy["recipe"] = recipe.Execution.Name
+		labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labelsCopy})
 
 		logger.Info(
 			"Deleting completed recipe Job with the following labels",
@@ -242,9 +250,33 @@ func (r *Reconciler) deleteCompletedJobsWithLabels(
 			context.TODO(), deleteOptions, metav1.ListOptions{LabelSelector: labelSelector},
 		)
 		if err != nil {
-
 			return err
 		}
+	}
+
+	return nil
+}
+
+// Delete ConfigMaps with the specified labels.
+func (r *Reconciler) deleteConfigMapsWithLabels(labels map[string]string) error {
+	cmClient := clientset.CoreV1().ConfigMaps(recipeNamespace)
+
+	propagationPolicy := metav1.DeletePropagationBackground
+	deleteOptions := metav1.DeleteOptions{
+		PropagationPolicy: &propagationPolicy,
+	}
+
+	labelSelector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels})
+
+	logger.Info(
+		"Deleting ConfigMaps with the following labels",
+		zap.String("labelSelector", labelSelector),
+	)
+	err := cmClient.DeleteCollection(
+		context.TODO(), deleteOptions, metav1.ListOptions{LabelSelector: labelSelector},
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil

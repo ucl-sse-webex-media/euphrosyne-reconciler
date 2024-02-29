@@ -12,6 +12,8 @@ rules:
   - configmaps
   verbs:
   - get
+  - create
+  - deletecollection
 - apiGroups:
   - "batch"
   resources:
