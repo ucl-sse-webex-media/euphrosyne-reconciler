@@ -227,12 +227,17 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_bucket(self, grafana_info):
         dataSourceInfo = grafana_info["dataSourceInfo"]
-        
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement(self, grafana_info):
         alert_rule = grafana_info["alertRule"]
-        query = alert_rule["data"][0]["model"]["query"]
+        model = alert_rule["data"][0]["model"]
+        # alert query configured in default editor mode
+        if "measurement" in model:
+            return model["measurement"]
+        
+        # alert query configured in query mode
+        query = model["query"]
         match = re.search(r'FROM\s+"([^"]+)"\s+WHERE', query)
         if match:
             result = match.group(1)
@@ -245,17 +250,21 @@ class DataAggregator(HTTPService):
         url = self.get_source_url("influxdb")
         body = {
             "uuid": incident.uuid,
-            "params": {
-                "bucket": influxdb_query["bucket"],
-                "measurement": influxdb_query["measurement"],
-                "startTime": influxdb_query["start_time"],
-                "stopTime": influxdb_query["stop_time"],
-            },
+            "params": influxdb_query
         }
         return self.post(url, body=body)
-
-    def get_opensearch_index_pattern_url(self, garfana_info):
-        links = garfana_info["detailPanel"]["fieldConfig"]["links"]
+    
+    def count_influxdb_metric(self,influxdb_records,metric,count_key):
+        count ={}
+        for item in influxdb_records:
+            if item[metric] in count:
+                count[item[metric]] += item[count_key]
+            else:
+                count[item[metric]] = item[count_key]    
+        return count
+    
+    def get_opensearch_index_pattern_url(self, grafana_info):
+        links = grafana_info["detailPanel"]["fieldConfig"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
             if "indexPattern" in url:
