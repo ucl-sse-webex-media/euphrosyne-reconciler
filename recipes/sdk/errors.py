@@ -19,6 +19,7 @@ class DataAggregatorHTTPError(ServiceError):
             }
         }
 
+
 class JiraHTTPError(ServiceError):
     def __init__(self, original_exception):
         self.original_exception = original_exception
@@ -30,7 +31,6 @@ class JiraHTTPError(ServiceError):
                 "message": str(self.original_exception),
             }
         }
-
 
 
 class JiraParsingError(ValueError):

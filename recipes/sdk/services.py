@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError,ApiResError
+from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError, ApiResError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -159,10 +159,10 @@ class DataAggregator(HTTPService):
         self._check_api_res_error(res)
         return res
 
-    def _check_api_res_error(self,res):
+    def _check_api_res_error(self, res):
         if isinstance(res, dict) and res.get("error") is not None:
             raise ApiResError(res.get("error"))
-        
+
     def _get_grafana_dashboard_from_url(self, url: str):
         """Get a Grafana dashboard ID from a URL."""
         return url.rsplit("/", 1)[-1].split("?")[0]
@@ -187,7 +187,7 @@ class DataAggregator(HTTPService):
 
         return dashboard_id, panel_id, alert_rule_id
 
-    def get_grafana_info_from_incident(self, incident: Incident):
+    def get_grafana_info_from_incident(self, incident: Incident,prefetch):
         """Get a Grafana dashboard."""
         dashboard_id, panel_id, alert_rule_id = self._get_grafana_info(incident.data)
         url = self.get_source_url("grafana")
@@ -198,6 +198,7 @@ class DataAggregator(HTTPService):
                 "panel_id": panel_id,
                 "alert_rule_id": alert_rule_id,
             },
+            "prefetch": prefetch,
         }
         return self.post(url, body=body)
 
@@ -206,8 +207,8 @@ class DataAggregator(HTTPService):
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
 
-    def calculate_query_start_time(self, grafana_info, firing_time):
-        alert_rule = grafana_info["alertRule"]
+    def calculate_query_start_time(self, grafana_result, firing_time):
+        alert_rule = grafana_result["alertRule"]
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
         alert_query = alert_rule["data"][0]
@@ -225,17 +226,17 @@ class DataAggregator(HTTPService):
         )
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def get_influxdb_bucket(self, grafana_info):
-        dataSourceInfo = grafana_info["dataSourceInfo"]
+    def get_influxdb_bucket(self, grafana_result):
+        dataSourceInfo = grafana_result["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
 
-    def get_influxdb_measurement(self, grafana_info):
-        alert_rule = grafana_info["alertRule"]
+    def get_influxdb_measurement(self, grafana_result):
+        alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         # alert query configured in default editor mode
         if "measurement" in model:
             return model["measurement"]
-        
+
         # alert query configured in query mode
         query = model["query"]
         match = re.search(r'FROM\s+"([^"]+)"\s+WHERE', query)
@@ -248,23 +249,20 @@ class DataAggregator(HTTPService):
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
         url = self.get_source_url("influxdb")
-        body = {
-            "uuid": incident.uuid,
-            "params": influxdb_query
-        }
+        body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
-    
-    def count_influxdb_metric(self,influxdb_records,metric,count_key):
-        count ={}
+        
+    def count_influxdb_metric(self, influxdb_records, metric, count_key):
+        count = {}
         for item in influxdb_records:
             if item[metric] in count:
                 count[item[metric]] += item[count_key]
             else:
-                count[item[metric]] = item[count_key]    
+                count[item[metric]] = item[count_key]
         return count
-    
-    def get_opensearch_index_pattern_url(self, grafana_info):
-        links = grafana_info["detailPanel"]["fieldConfig"]["links"]
+
+    def get_opensearch_index_pattern_url(self, grafana_result):
+        links = grafana_result["detailPanel"]["fieldConfig"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
             if "indexPattern" in url:
@@ -283,7 +281,7 @@ class DataAggregator(HTTPService):
         body = {
             "uuid": incident.uuid,
             "params": {
-                "field": {"WEBEX_TRACKINGID": opensearch_query["WEBEX_TRACKINGID"]},
+                "field": {"webextrackingID": opensearch_query["webextrackingID"]},
                 "index_pattern": opensearch_query["index_pattern"],
             },
         }
