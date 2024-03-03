@@ -157,10 +157,10 @@ class DataAggregator(HTTPService):
         except requests.exceptions.RequestException as e:
             raise DataAggregatorHTTPError(e)
         self._check_api_res_error(res)
-        return res
+        return res["data"]
 
     def _check_api_res_error(self, res):
-        if isinstance(res, dict) and res.get("error") is not None:
+        if res.get("error") is not None:
             raise ApiResError(res.get("error"))
 
     def _get_grafana_dashboard_from_url(self, url: str):
@@ -187,7 +187,7 @@ class DataAggregator(HTTPService):
 
         return dashboard_id, panel_id, alert_rule_id
 
-    def get_grafana_info_from_incident(self, incident: Incident,prefetch):
+    def get_grafana_info_from_incident(self, incident: Incident, prefetch=False):
         """Get a Grafana dashboard."""
         dashboard_id, panel_id, alert_rule_id = self._get_grafana_info(incident.data)
         url = self.get_source_url("grafana")
@@ -251,10 +251,10 @@ class DataAggregator(HTTPService):
         url = self.get_source_url("influxdb")
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
-        
-    def count_influxdb_metric(self, influxdb_records, metric, count_key):
+
+    def count_metric(self, record_list, metric, count_key):
         count = {}
-        for item in influxdb_records:
+        for item in record_list:
             if item[metric] in count:
                 count[item[metric]] += item[count_key]
             else:
@@ -262,15 +262,14 @@ class DataAggregator(HTTPService):
         return count
 
     def get_opensearch_index_pattern_url(self, grafana_result):
-        links = grafana_result["detailPanel"]["fieldConfig"]["links"]
+        links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
             if "indexPattern" in url:
                 startStr = "indexPattern:'"
-                start_index = url.find(startStr) + len(startStr) + 1
+                start_index = url.find(startStr) + len(startStr)
                 end_index = url.find("'", start_index)
                 index_pattern_url = url[start_index:end_index]
-                print(index_pattern_url)
                 return index_pattern_url
 
         return ""
