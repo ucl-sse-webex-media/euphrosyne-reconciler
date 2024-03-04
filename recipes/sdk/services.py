@@ -177,12 +177,9 @@ class DataAggregator(HTTPService):
 
     def _get_grafana_info(self, data: dict):
         """Get the Grafana dashboard, specific panel and alert rule from the input data."""
-        alert = data.get("alert").get("alerts")[0]
-
-        dashboard_id = alert.get("panel_id") or self._get_grafana_dashboard_from_url(
-            alert["dashboardURL"]
-        )
-        panel_id = alert.get("panel_id") or self._get_grafana_panel_from_url(alert["panelURL"])
+        alert = data.get("alert")
+        dashboard_id = self._get_grafana_dashboard_from_url(alert["dashboardURL"])
+        panel_id = self._get_grafana_panel_from_url(alert["panelURL"])
         alert_rule_id = self._get_alert_rule_from_url(alert["generatorURL"])
 
         return dashboard_id, panel_id, alert_rule_id
@@ -203,7 +200,7 @@ class DataAggregator(HTTPService):
         return self.post(url, body=body)
 
     def get_firing_time(self, incident):
-        alert = incident.data.get("alert").get("alerts")[0]
+        alert = incident.data.get("alert")
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
 
@@ -277,11 +274,5 @@ class DataAggregator(HTTPService):
     def get_opensearch_records(self, incident: Incident, opensearch_query):
         """Get influxdb records."""
         url = self.get_source_url("opensearch")
-        body = {
-            "uuid": incident.uuid,
-            "params": {
-                "field": {"webextrackingID": opensearch_query["webextrackingID"]},
-                "index_pattern": opensearch_query["index_pattern"],
-            },
-        }
+        body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)

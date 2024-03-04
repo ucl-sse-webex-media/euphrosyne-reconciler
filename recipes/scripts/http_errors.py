@@ -33,7 +33,6 @@ def handler(incident: Incident, recipe: Recipe):
         "startTime": start_time,
         "stopTime": firing_time,
     }
-
     try:
         influxdb_records = aggregator.get_influxdb_records(incident, influxdb_query)
     except (DataAggregatorHTTPError, ApiResError) as e:
@@ -83,16 +82,16 @@ def handler(incident: Incident, recipe: Recipe):
                 max_method = method
 
     # query for opensearch
-    influxdb_webextrackingid_name = "webextrackingID"
+    influxdb_trackingid_name = "WEBEX_TRACKINGID"
     webex_tracking_id_list = list(
-        {record[influxdb_webextrackingid_name] for record in influxdb_records}
+        {record[influxdb_trackingid_name] for record in influxdb_records}
     )
-    
+
     index_pattern_url = aggregator.get_opensearch_index_pattern_url(grafana_result)
     if index_pattern_url == "":
-        index_pattern_url = "541ca530-d1c5-11ee-b437-abf99369aba1"
+        index_pattern_url = "bcff5cd0-d9c9-11ee-974e-7777f71ed9aa"
     opensearch_query = {
-        "webextrackingID": webex_tracking_id_list,
+        "field": {"WEBEX_TRACKINGID": webex_tracking_id_list},
         "index_pattern": index_pattern_url,
     }
     try:
@@ -115,6 +114,7 @@ def handler(incident: Incident, recipe: Recipe):
     max_userid_count = user_id_count[max_userid]
 
     # find the example error
+    # if the confluence uri is in errors, use error with the uri as the example
     if confluence_uri_count > 0:
         for item in influxdb_records:
             if (
@@ -124,7 +124,7 @@ def handler(incident: Incident, recipe: Recipe):
                 example_influxdb = item
                 break
     else:
-        # find an example that has max mertric
+        # find an example that has max metric value
         max_dict = {
             "environment": max_region_count,
             "uri": max_uri_count,
@@ -151,9 +151,9 @@ def handler(incident: Incident, recipe: Recipe):
             for _, record_list in opensearch_records.items():
                 example_opensearch = record_list[0]
                 break
-        
+
     if example_influxdb is not None:
-        example_opensearch = opensearch_records[example_influxdb[influxdb_webextrackingid_name]][0]
+        example_opensearch = opensearch_records[example_influxdb[influxdb_trackingid_name]][0]
 
     # format analysis
     analysis = f"From {start_time} To {firing_time}, there are:\n"
@@ -173,11 +173,11 @@ def handler(incident: Incident, recipe: Recipe):
 
     analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
     analysis += f"Largest percent of USER ID is '{max_userid}', occur in {max_userid_count} ({max_userid_count/opensearch_records_len*100}%) of opensearch logs\n"
-    
+
     analysis += "\n"
     analysis += "Example Error Info: \n"
     example_openseach_field = example_opensearch["fields"]
-    analysis += f"WEBEXTRACKING_ID:{example_openseach_field['webextrackingID']}\nregion:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}\n"
+    analysis += f"WEBEXTRACKING_ID:{example_openseach_field['WEBEX_TRACKINGID']}\nregion:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}\n"
 
     analysis += f"message: {example_opensearch['message']}\n"
     if example_openseach_field.get("stack_trace") is not None:

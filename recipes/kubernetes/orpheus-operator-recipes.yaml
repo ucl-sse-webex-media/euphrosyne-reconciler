@@ -6,17 +6,17 @@ data:
   debugging: |
     dummy:
       enabled: false
-      image: "phoevos/euphrosyne-recipes:latest"
+      image: "maikeee32e/euphrosyne-recipes:latest"
       entrypoint: "dummy"
       description: "Dummy recipe for debugging purposes."
     http-errors:
       enabled: true
-      image: "phoevos/euphrosyne-recipes:latest"
+      image: "maikeee32e/euphrosyne-recipes:latest"
       entrypoint: "http-errors"
       description: "Recipe for debugging alerts related to HTTP errors."
   actions: |
     jira:
       enabled: true
-      image: "phoevos/euphrosyne-recipes:latest"
+      image: "maikeee32e/euphrosyne-recipes:latest"
       entrypoint: "jira"
       description: "Recipe for creating a JIRA issue."
