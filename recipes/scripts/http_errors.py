@@ -147,6 +147,11 @@ def handler(incident: Incident, recipe: Recipe):
                     if item["fields"]["USER_ID"] == max_userid:
                         example_opensearch = record
                         break
+        else:
+            for _, record_list in opensearch_records.items():
+                example_opensearch = record_list[0]
+                break
+        
     if example_influxdb is not None:
         example_opensearch = opensearch_records[example_influxdb[influxdb_webextrackingid_name]][0]
 
@@ -167,8 +172,8 @@ def handler(incident: Incident, recipe: Recipe):
         analysis += f"IMPORTANT! {confluence_uri_count} ({confluence_uri_count/(error_num)*100} %) errors occur in uri 'calliope/api/v2/venues/param/confluences' with method 'POST' \n"
 
     analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
-    analysis += f"Largest percent of USER ID is '{max_userid}', occur in {max_userid_count} ({max_userid_count/opensearch_records_len*100}%) of opensearch logs"
-
+    analysis += f"Largest percent of USER ID is '{max_userid}', occur in {max_userid_count} ({max_userid_count/opensearch_records_len*100}%) of opensearch logs\n"
+    
     analysis += "\n"
     analysis += "Example Error Info: \n"
     example_openseach_field = example_opensearch["fields"]
