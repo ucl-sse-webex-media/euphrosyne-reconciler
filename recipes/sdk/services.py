@@ -200,11 +200,13 @@ class DataAggregator(HTTPService):
         return self.post(url, body=body)
 
     def get_firing_time(self, incident):
+        """Get alert firign time."""
         alert = incident.data.get("alert")
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
 
     def calculate_query_start_time(self, grafana_result, firing_time):
+        """Calculate query start time by alert rule."""
         alert_rule = grafana_result["alertRule"]
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
@@ -224,10 +226,12 @@ class DataAggregator(HTTPService):
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def get_influxdb_bucket(self, grafana_result):
+        """Get influxdb bucket from alert rule."""
         dataSourceInfo = grafana_result["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement(self, grafana_result):
+        """Get influxdb measurement from alert rule."""
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         # alert query configured in default editor mode
@@ -249,7 +253,8 @@ class DataAggregator(HTTPService):
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
 
-    def count_metric(self, record_list, metric, count_key):
+    def count_metric_by_key(self, record_list, metric, count_key):
+        """count the number of metric by a key in list"""
         count = {}
         for item in record_list:
             if item[metric] in count:
@@ -259,6 +264,7 @@ class DataAggregator(HTTPService):
         return count
 
     def get_opensearch_index_pattern_url(self, grafana_result):
+        """Get infex pattern from grafana."""
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
@@ -276,3 +282,10 @@ class DataAggregator(HTTPService):
         url = self.get_source_url("opensearch")
         body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)
+
+    def get_total_openseach_records_num(self, opensearch_records):
+        """Get total num of openseach_records."""
+        num = 0
+        for _, record_list in opensearch_records.items():
+            num += len(record_list)
+        return num
