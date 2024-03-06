@@ -1,14 +1,15 @@
-from collections import Counter
 import logging
 import re
+from collections import Counter
 
-from sdk.errors import DataAggregatorHTTPError, ApiResError
+from sdk.errors import ApiResError, DataAggregatorHTTPError
 from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeStatus
 
 logger = logging.getLogger(__name__)
 
 count_key = "_value"
+
 
 def count_metric_by_key(record_list, metric, count_key):
     """count the number of metric by a key in list"""
@@ -19,6 +20,7 @@ def count_metric_by_key(record_list, metric, count_key):
         else:
             count[item[metric]] = item[count_key]
     return count
+
 
 def analysis_max_region(influxdb_records):
     # find the largest percentage of region(environment)

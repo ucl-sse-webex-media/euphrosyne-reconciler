@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError, ApiResError
+from sdk.errors import ApiResError, DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
