@@ -10,10 +10,19 @@ logger = logging.getLogger(__name__)
 
 count_key = "_value"
 
+def count_metric_by_key(record_list, metric, count_key):
+    """count the number of metric by a key in list"""
+    count = {}
+    for item in record_list:
+        if item[metric] in count:
+            count[item[metric]] += item[count_key]
+        else:
+            count[item[metric]] = item[count_key]
+    return count
 
-def analysis_max_region(aggregator, influxdb_records):
+def analysis_max_region(influxdb_records):
     # find the largest percentage of region(environment)
-    region_count = aggregator.count_metric_by_key(influxdb_records, "environment",count_key)
+    region_count = count_metric_by_key(influxdb_records, "environment", count_key)
     max_region_name = max(region_count, key=region_count.get)
     max_region_count = region_count[max_region_name]
     return max_region_name, max_region_count
@@ -136,13 +145,12 @@ def handler(incident: Incident, recipe: Recipe):
         raise
 
     # _field for error type
-    # _value for count
     error_num = sum(item[count_key] for item in influxdb_records)
 
     # count how many different error code like 500,501
-    error_code_count = aggregator.count_metric_by_key(influxdb_records, "_field", count_key)
+    error_code_count = count_metric_by_key(influxdb_records, "_field", count_key)
 
-    max_region_name, max_region_count = analysis_max_region(aggregator, influxdb_records)
+    max_region_name, max_region_count = analysis_max_region(influxdb_records)
 
     max_uri, max_method, max_uri_count, confluence_uri_count = analysis_max_url(influxdb_records)
 
@@ -164,7 +172,7 @@ def handler(incident: Incident, recipe: Recipe):
         results.status = RecipeStatus.FAILED
         raise
 
-    opensearch_records_len = aggregator.get_total_openseach_records_num(opensearch_records)
+    opensearch_records_len = aggregator.get_total_opensearch_records_num(opensearch_records)
 
     max_userid, max_userid_count, user_id_count = analysis_max_user_id(opensearch_records)
     # find the example error

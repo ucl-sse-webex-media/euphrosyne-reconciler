@@ -200,7 +200,7 @@ class DataAggregator(HTTPService):
         return self.post(url, body=body)
 
     def get_firing_time(self, incident):
-        """Get alert firign time."""
+        """Get alert firing time."""
         alert = incident.data.get("alert")
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
@@ -253,18 +253,8 @@ class DataAggregator(HTTPService):
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
 
-    def count_metric_by_key(self, record_list, metric, count_key):
-        """count the number of metric by a key in list"""
-        count = {}
-        for item in record_list:
-            if item[metric] in count:
-                count[item[metric]] += item[count_key]
-            else:
-                count[item[metric]] = item[count_key]
-        return count
-
     def get_opensearch_index_pattern_url(self, grafana_result):
-        """Get infex pattern from grafana."""
+        """Get index pattern from grafana."""
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
@@ -283,7 +273,7 @@ class DataAggregator(HTTPService):
         body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)
 
-    def get_total_openseach_records_num(self, opensearch_records):
+    def get_total_opensearch_records_num(self, opensearch_records):
         """Get total num of openseach_records."""
         num = 0
         for _, record_list in opensearch_records.items():
