@@ -235,7 +235,7 @@ class DataAggregator(HTTPService):
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         # alert query configured in default editor mode
-        if "measurement" in model:
+        if "measurement" in model and model["measurement"] != "":
             return model["measurement"]
 
         # alert query configured in query mode
