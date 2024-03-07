@@ -5,7 +5,8 @@ from urllib.parse import urlparse
 import requests
 from requests.auth import HTTPBasicAuth
 
-from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError
+from sdk.errors import DataAggregatorHTTPError, JiraHTTPError, JiraParsingError, \
+    SpaceParsingError, SpaceHTTPError
 from sdk.incident import Incident
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ class Jira(HTTPService):
 
 
 class Space(HTTPService):
+    #TODO: raise error
     '''
     create room: /rooms
     header: personal access token
@@ -154,63 +156,85 @@ class Space(HTTPService):
         #TODO: add token to environment variables
         self.token = os.getenv("WEBEX_TOKEN")
         self.bot_token = os.getenv("BOT_TOKEN")
-        # TODO: add error handling
+        if not self.token or not self.bot_token:
+            raise SpaceParsingError("WEBEX_TOKEN and BOT_TOKEN environment variables must be set.")
 
     def get_headers(self):
-        """Get Authentication Header."""
+        """Get Authentication Header For Admin"""
         return {
             'Authorization': 'Bearer ' + self.token
         }
 
     def get_bot_headers(self):
-        """Get Authentication Header."""
+        """Get Authentication Header For Bot"""
         return {
             'Authorization': 'Bearer ' + self.bot_token
         }
 
     def create_room(self, data: dict):
         """Create a Webex Teams Room."""
-        data = data["data"]
         title = data.get("title")
-        #TODO: add space parsing error (title is required)
-        description = data.get("description") or "This is the room description."
+        if not title:
+            raise SpaceParsingError("Title is required.")
+        try:
+            # check if there is any exitsting room
+            room_id = None
+            # QUESTION: which token should be used, bot or admin?
+            response = self.get(self.url + "/rooms", headers=self.get_headers())
+            for room in response["items"]:
+                if room["title"] == title:
+                    return room["id"]
+        except requests.exceptions.RequestException as e:
+            logger.error("Failed to get Webex Teams room: ", e)
+            raise SpaceHTTPError(e)
 
+        description = data.get("description") or data.get("uuid")
+        # create a new room
         room_fields = {
             "title": title,
             "description": description
         }
         try:
             response = self.post(self.url + "/rooms", body=room_fields, headers=self.get_headers())
-            return response
+            return response["id"]
         except requests.exceptions.RequestException as e:
             logger.error("Failed to create Webex Teams room: ", e)
-            raise e
+            raise SpaceHTTPError(e)
 
-    #QUESTION: 3. also add bot the new space?
-    #QUESTION: 4. add the current user to a new room or add a new user (personEmail) to the new room?
-    # if it is the current user, the two rooms are kind of duplicated
+
     def add_user(self, data: dict, roomId: str):
         """Add a user to a Webex Teams Room."""
-        data = data["data"]
-        personId = data.get("personId")
+        personEmails = data.get("personEmails")
+        if not personEmails:
+            raise SpaceParsingError("Emails of User is required.")
 
-        membership_fields = {
+        #TODO: beautify the response
+        add_user_response = ""
+        for personEmail in personEmails:
+            membership_fields = {
+                "roomId": roomId,
+                "personId": personEmail,
+            }
+            try:
+                response = self.post(self.url + "/memberships", body=membership_fields, headers=self.get_headers())
+                add_user_response += response["personEmail"] + " added to the room\n"
+            except requests.exceptions.RequestException as e:
+                logger.error("Failed to add user to Webex Teams room: ", e)
+                raise SpaceHTTPError(e)
+
+        return add_user_response
+
+    def post_analysis(self, data, roomId: str):
+        body = {
             "roomId": roomId,
-            "personId": personId,
+            "text": data["analysis"]
         }
         try:
-            response = self.post(self.url + "/memberships", body=membership_fields, headers=self.get_headers())
-            return response
+            response = self.post(self.url + "/messages", body=body, headers=self.get_bot_headers())
+            return response["text"]
         except requests.exceptions.RequestException as e:
-            logger.error("Failed to add user to Webex Teams room: ", e)
-            raise e
-
-    def get_analysis(self):
-        return analysis
-
-    #QUESTION: 5. how to get previous analysis, from redis?
-    def post_analysis():
-        #QUESTION: 2. who will post the analysis, the bot?
+            logger.error("Failed to post analysis to Webex Teams room: ", e)
+            raise SpaceHTTPError(e)
 
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""

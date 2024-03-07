@@ -1,5 +1,6 @@
 import logging
 
+from sdk.errors import SpaceHTTPError, SpaceParsingError
 from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeStatus
 from sdk.services import Space
@@ -24,19 +25,21 @@ def handler(incident: Incident, recipe: Recipe):
     space = Space()
     results = recipe.results
     try:
-        # create a new space
-        room = space.create_room(incident.data)
-        #TODO: add error handling
-        roomId = room["id"]
-        results.log(f"Space created successfully: {roomId}")
-        #TODO: add the user who send the reques to this new space, post previous
-        space.add_user(incident.data, roomId)
+        roomId = space.create_room(incident.data)
+        log = f"Space created successfully: {roomId}"
+        response = space.add_user(incident.data, roomId)
+        log += response
+        response = space.post_analysis(incident.data, roomId)
+        response = f"Analysis posted successfully" {response}"
+        log += response
+        results.status = RecipeStatus.SUCCESSFUL
+        results.log(log)
+    except (SpaceHTTPError, SpaceParsingError) as e:
+        results.log(f"Failed to create space: {e}")
+        results.status = RecipeStatus.FAILED
 
-    # analysis there
+    def main():
+        Recipe("space", handler).run()
 
-
-def main():
-    Recipe("space", handler).run()
-
-if __name__ == "__main__":
-    main()
+    if __name__ == "__main__":
+        main()

@@ -14,6 +14,7 @@ setup(
             "dummy = scripts.dummy:main",
             "http-errors = scripts.http_errors:main",
             "jira = scripts.jira:main",
+            "space = scripts.space:main",
         ],
     },
     extras_require={
