@@ -26,13 +26,13 @@ class HTTPService:
             "Content-Type": "application/json",
         }
 
-    def get(self, url, params=None, auth=None):
+    def get(self, url, params=None, auth=None, headers=None):
         """Send a GET request."""
         try:
             response = self.session.get(
                 url,
                 params=params,
-                headers=self.get_headers(),
+                headers=headers or self.get_headers(),
                 auth=auth,
             )
             response.raise_for_status()
@@ -41,14 +41,14 @@ class HTTPService:
             logger.error(e)
             raise e
 
-    def post(self, url, params=None, body=None, auth=None):
+    def post(self, url, params=None, body=None, auth=None, headers=None):
         """Send a POST request."""
         try:
             response = self.session.post(
                 url,
                 params=params,
                 json=body,
-                headers=self.get_headers(),
+                headers=headers or self.get_headers(),
                 auth=auth,
             )
             response.raise_for_status()
@@ -153,9 +153,9 @@ class Space(HTTPService):
 
     def _load_environment_variables(self):
         """Load environment variables."""
-        #TODO: add token to environment variables
         self.token = os.getenv("WEBEX_TOKEN")
         self.bot_token = os.getenv("BOT_TOKEN")
+        self.bot_email = os.getenv("BOT_EMAIL")
         if not self.token or not self.bot_token:
             raise SpaceParsingError("WEBEX_TOKEN and BOT_TOKEN environment variables must be set.")
 
@@ -203,19 +203,34 @@ class Space(HTTPService):
 
 
     def add_user(self, data: dict, roomId: str):
+        #TODO: error handling - user already in the room
         """Add a user to a Webex Teams Room."""
         personEmails = data.get("personEmails")
         if not personEmails:
             raise SpaceParsingError("Emails of User is required.")
 
+        bot_fields = {
+            "roomId": roomId,
+            "personEmail": self.bot_email
+        }
+        try:
+            response = self.post(self.url + "/memberships", body=bot_fields, headers=self.get_headers())
+        except requests.exceptions.RequestException as e:
+            logger.error("Failed to add bot to Webex Teams room: ", e)
+            raise SpaceHTTPError(e)
+        
+
+
         #TODO: beautify the response
+        #QUESTION: bot could not be added to the room
         add_user_response = ""
         for personEmail in personEmails:
             membership_fields = {
                 "roomId": roomId,
-                "personId": personEmail,
+                "personEmail": personEmail,
             }
             try:
+                logger.error(membership_fields)
                 response = self.post(self.url + "/memberships", body=membership_fields, headers=self.get_headers())
                 add_user_response += response["personEmail"] + " added to the room\n"
             except requests.exceptions.RequestException as e:

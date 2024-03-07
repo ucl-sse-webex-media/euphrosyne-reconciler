@@ -30,7 +30,7 @@ def handler(incident: Incident, recipe: Recipe):
         response = space.add_user(incident.data, roomId)
         log += response
         response = space.post_analysis(incident.data, roomId)
-        response = f"Analysis posted successfully" {response}"
+        response = f"Analysis posted successfully {response}"
         log += response
         results.status = RecipeStatus.SUCCESSFUL
         results.log(log)
@@ -38,8 +38,8 @@ def handler(incident: Incident, recipe: Recipe):
         results.log(f"Failed to create space: {e}")
         results.status = RecipeStatus.FAILED
 
-    def main():
-        Recipe("space", handler).run()
+def main():
+    Recipe("space", handler).run()
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()
