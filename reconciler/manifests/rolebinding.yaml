@@ -12,3 +12,20 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: euphrosyne-reconciler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
+  name: euphrosyne-reconciler-recipes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: euphrosyne-reconciler-recipes
+subjects:
+- kind: ServiceAccount
+  name: euphrosyne-reconciler
+  namespace: <reconciler-namespace>
+

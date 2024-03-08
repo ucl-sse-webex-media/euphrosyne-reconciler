@@ -227,7 +227,7 @@ func (r *Reconciler) Cleanup(completedRecipes []Recipe) {
 func (r *Reconciler) deleteCompletedJobsWithLabels(
 	completedRecipes []Recipe, labels map[string]string,
 ) error {
-	jobClient := clientset.BatchV1().Jobs(recipeNamespace)
+	jobClient := clientset.BatchV1().Jobs(r.config.RecipeNamespace)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
@@ -259,7 +259,7 @@ func (r *Reconciler) deleteCompletedJobsWithLabels(
 
 // Delete ConfigMaps with the specified labels.
 func (r *Reconciler) deleteConfigMapsWithLabels(labels map[string]string) error {
-	cmClient := clientset.CoreV1().ConfigMaps(recipeNamespace)
+	cmClient := clientset.CoreV1().ConfigMaps(r.config.RecipeNamespace)
 
 	propagationPolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{
