@@ -6,9 +6,19 @@ from sdk.errors import ApiResError, DataAggregatorHTTPError
 from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeStatus
 
+from datetime import datetime
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 count_key = "_value"
+
+def get_influxdb_start_and_end_time(influxdb_records):
+    """get the start and end time of influxdb records"""
+    start_time = influxdb_records[0]["_time"]
+    end_time = influxdb_records[-1]["_time"]
+    return start_time, end_time
 
 
 def count_metric_by_key(record_list, metric, count_key):
@@ -114,6 +124,64 @@ def analysis_confluence_log(opensearch_records):
     )
     return sorted_agent_full_name_count, sorted_agent_org_group_count
 
+def analysis_trend(influxdb_records, max_region):
+    def adjust_timestamp_for_parsing(timestamp_str):
+        # Truncate or round the timestamp to microsecond precision
+        return timestamp_str[:26] + 'Z'  # Truncate to microsecond precision for datetime parsing
+    
+    # Filter records for the specified max_region
+    max_region_records = [record for record in influxdb_records if record['environment'] == max_region]
+    
+    # Ensure there are records to analyse after filtering
+    if not max_region_records:
+        return "No records to analyze for the specified region."
+    
+    print(max_region_records)
+    print(len(max_region_records))
+    
+    first_time, last_time = get_influxdb_start_and_end_time(max_region_records)
+    
+    # Convert _time to datetime objects and sort the filtered records
+    sorted_records = sorted(
+        max_region_records, 
+        key=lambda x: datetime.strptime(adjust_timestamp_for_parsing(x['_time']), "%Y-%m-%dT%H:%M:%S.%fZ")
+    )
+
+    # Prepare data for regression model
+    start_time = datetime.strptime(adjust_timestamp_for_parsing(sorted_records[0]['_time']), "%Y-%m-%dT%H:%M:%S.%fZ")
+    X = [(datetime.strptime(adjust_timestamp_for_parsing(record['_time']), "%Y-%m-%dT%H:%M:%S.%fZ") - start_time).total_seconds() for record in sorted_records]
+    X = np.array(X).reshape(-1, 1)  # Reshape for sklearn
+    y = np.array([record['_value'] for record in sorted_records])
+
+    # Fit linear regression model
+    model = LinearRegression().fit(X, y)
+    slope = model.coef_[0]
+
+    # Find the peak and the lowest values
+    peak_value = max(y)
+    lowest_value = min(y)
+    peak_index = np.argmax(y)
+    lowest_index = np.argmin(y)
+
+    print(y)
+
+    # Calculate time to peak and lowest from the start
+    time_to_peak_seconds = int(X[peak_index][0])
+    time_to_lowest_seconds = int(X[lowest_index][0])
+
+    num_data_points = len(y)
+
+    print(num_data_points)
+
+    # Interpret the slope for trend analysis
+    if slope > 0:
+        trend = "increasing"
+    elif slope < 0:
+        trend = "decreasing"
+    else:
+        trend = "stable"
+
+    return f"The trend is {trend}.", peak_value, lowest_value, peak_index, lowest_index, time_to_peak_seconds, time_to_lowest_seconds, num_data_points, first_time, last_time
 
 def handler(incident: Incident, recipe: Recipe):
     """HTTP Errors Recipe."""
@@ -146,6 +214,9 @@ def handler(incident: Incident, recipe: Recipe):
         results.status = RecipeStatus.FAILED
         raise
 
+    # get the start and end time of influxdb records
+    first_time, last_time = get_influxdb_start_and_end_time(influxdb_records)
+
     # _field for error type
     error_num = sum(item[count_key] for item in influxdb_records)
 
@@ -155,6 +226,8 @@ def handler(incident: Incident, recipe: Recipe):
     max_region_name, max_region_count = analysis_max_region(influxdb_records)
 
     max_uri, max_method, max_uri_count, confluence_uri_count = analysis_max_url(influxdb_records)
+
+    trend, peak_value, lowest_value, peak_index, lowest_index, time_to_peak_seconds, time_to_lowest_seconds, num_data_points, max_region_first_time, max_region_last_time = analysis_trend(influxdb_records, max_region_name)
 
     # query for opensearch
     influxdb_trackingid_name = "WEBEX_TRACKINGID"
@@ -220,7 +293,7 @@ def handler(incident: Incident, recipe: Recipe):
         example_opensearch = opensearch_records[example_influxdb[influxdb_trackingid_name]][0]
 
     # format analysis
-    analysis = f"From {start_time} To {firing_time}, there are:\n"
+    analysis = f"From {first_time} To {last_time}, there are:\n"
 
     for error_code, count in error_code_count.items():
         analysis += f"{count} pieces of http {error_code} errors \n"
@@ -237,6 +310,19 @@ def handler(incident: Incident, recipe: Recipe):
 
     analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
     analysis += f"Largest percent of USER ID is '{max_userid}', occur in {max_userid_count} ({max_userid_count/opensearch_records_len*100}%) of opensearch logs\n"
+
+    if num_data_points > 1:
+        analysis += f"Trend for 5xx error in max percent region: {trend} \n"
+
+        if peak_index == 0: 
+            analysis += f"Peak value is {peak_value} times from the first data point in max region {max_region_first_time} \n"
+        else:
+            analysis += f"Peak value: {peak_value} times at {time_to_peak_seconds} seconds from the first data point in max region {max_region_first_time} \n"
+       
+        if lowest_index == 0:
+            analysis += f"Lowest value is {lowest_value} times from the first data point in max region {max_region_first_time} \n"
+        else:
+            analysis += f"Lowest value: {lowest_value} times at {time_to_lowest_seconds} seconds from the first data point in max region {max_region_first_time} \n"
 
     analysis += "\n"
     analysis += "Example Error Info: \n"
