@@ -1,24 +1,29 @@
 import logging
 import re
 from collections import Counter
+from datetime import datetime
+
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
 from sdk.errors import ApiResError, DataAggregatorHTTPError
 from sdk.incident import Incident
 from sdk.recipe import Recipe, RecipeStatus
 
-from datetime import datetime
-from sklearn.linear_model import LinearRegression
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 count_key = "_value"
 
+
+def precise_timestamp_to_second(timestamp_str):
+    return timestamp_str[:19] + "Z"
+
+
 def get_influxdb_start_and_end_time(influxdb_records):
-    """get the start and end time of influxdb records"""
+    """get the start and end time of accurate influxdb records"""
     start_time = influxdb_records[0]["_time"]
     end_time = influxdb_records[-1]["_time"]
-    return start_time, end_time
+    return precise_timestamp_to_second(start_time), precise_timestamp_to_second(end_time)
 
 
 def count_metric_by_key(record_list, metric, count_key):
@@ -87,7 +92,7 @@ def analysis_max_user_id(opensearch_records):
 
 def analysis_confluence_log(opensearch_records):
     confluence_log_list = []
-    for _, record_list in opensearch_records:
+    for _, record_list in opensearch_records.items():
         for record in record_list:
             operation_key = record["fields"]["operation_key"]
             method = operation_key.split(" ")[0]
@@ -108,7 +113,7 @@ def analysis_confluence_log(opensearch_records):
                 left_bracket_index = agent_name.find("(")
                 agent_full_name = agent_name[:left_bracket_index]
                 agent_full_name_list.append(agent_full_name)
-
+                # agent full name in org.group.xxx format
                 first_dot = agent_name.find(".")
                 second_dot = agent_name.find(".", first_dot + 1)
                 agent_org_group = agent_name[:second_dot]
@@ -118,40 +123,46 @@ def analysis_confluence_log(opensearch_records):
     sorted_agent_full_name_count = sorted(
         agent_full_name_count.items(), key=lambda x: x[1], reverse=True
     )
-    agent_org_group_coount = Counter(agent_org_group_list)
+    agent_org_group_count = Counter(agent_org_group_list)
     sorted_agent_org_group_count = sorted(
-        agent_org_group_coount.items(), key=lambda x: x[1], reverse=True
+        agent_org_group_count.items(), key=lambda x: x[1], reverse=True
     )
-    return sorted_agent_full_name_count, sorted_agent_org_group_count
+    return sorted_agent_full_name_count, sorted_agent_org_group_count, len(agent_full_name_list)
+
 
 def analysis_trend(influxdb_records, max_region):
-    def adjust_timestamp_for_parsing(timestamp_str):
-        # Truncate or round the timestamp to microsecond precision
-        return timestamp_str[:26] + 'Z'  # Truncate to microsecond precision for datetime parsing
-    
     # Filter records for the specified max_region
-    max_region_records = [record for record in influxdb_records if record['environment'] == max_region]
-    
+    max_region_records = [
+        record for record in influxdb_records if record["environment"] == max_region
+    ]
+
     # Ensure there are records to analyse after filtering
     if not max_region_records:
         return "No records to analyze for the specified region."
-    
-    print(max_region_records)
-    print(len(max_region_records))
-    
-    first_time, last_time = get_influxdb_start_and_end_time(max_region_records)
-    
+
+    first_time, _ = get_influxdb_start_and_end_time(max_region_records)
+
     # Convert _time to datetime objects and sort the filtered records
     sorted_records = sorted(
-        max_region_records, 
-        key=lambda x: datetime.strptime(adjust_timestamp_for_parsing(x['_time']), "%Y-%m-%dT%H:%M:%S.%fZ")
+        max_region_records,
+        key=lambda x: datetime.strptime(
+            precise_timestamp_to_second(x["_time"]), "%Y-%m-%dT%H:%M:%SZ"
+        ),
     )
 
     # Prepare data for regression model
-    start_time = datetime.strptime(adjust_timestamp_for_parsing(sorted_records[0]['_time']), "%Y-%m-%dT%H:%M:%S.%fZ")
-    X = [(datetime.strptime(adjust_timestamp_for_parsing(record['_time']), "%Y-%m-%dT%H:%M:%S.%fZ") - start_time).total_seconds() for record in sorted_records]
+    start_time = datetime.strptime(
+        precise_timestamp_to_second(sorted_records[0]["_time"]), "%Y-%m-%dT%H:%M:%SZ"
+    )
+    X = [
+        (
+            datetime.strptime(precise_timestamp_to_second(record["_time"]), "%Y-%m-%dT%H:%M:%SZ")
+            - start_time
+        ).total_seconds()
+        for record in sorted_records
+    ]
     X = np.array(X).reshape(-1, 1)  # Reshape for sklearn
-    y = np.array([record['_value'] for record in sorted_records])
+    y = np.array([record["_value"] for record in sorted_records])
 
     # Fit linear regression model
     model = LinearRegression().fit(X, y)
@@ -159,19 +170,12 @@ def analysis_trend(influxdb_records, max_region):
 
     # Find the peak and the lowest values
     peak_value = max(y)
-    lowest_value = min(y)
     peak_index = np.argmax(y)
-    lowest_index = np.argmin(y)
-
-    print(y)
 
     # Calculate time to peak and lowest from the start
     time_to_peak_seconds = int(X[peak_index][0])
-    time_to_lowest_seconds = int(X[lowest_index][0])
 
     num_data_points = len(y)
-
-    print(num_data_points)
 
     # Interpret the slope for trend analysis
     if slope > 0:
@@ -181,7 +185,15 @@ def analysis_trend(influxdb_records, max_region):
     else:
         trend = "stable"
 
-    return f"The trend is {trend}.", peak_value, lowest_value, peak_index, lowest_index, time_to_peak_seconds, time_to_lowest_seconds, num_data_points, first_time, last_time
+    return (
+        trend,
+        peak_value,
+        peak_index,
+        time_to_peak_seconds,
+        num_data_points,
+        first_time,
+    )
+
 
 def handler(incident: Incident, recipe: Recipe):
     """HTTP Errors Recipe."""
@@ -196,16 +208,22 @@ def handler(incident: Incident, recipe: Recipe):
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
-
     # query for influxdb
     firing_time = aggregator.get_firing_time(incident)
     start_time = aggregator.calculate_query_start_time(grafana_result, firing_time)
+
+    tags = aggregator.get_influxdb_tags(grafana_result)
+    tag_set = []
+    for tag in tags:
+        if "httpStatusCode" in tag["key"]:
+            tag_set.append({"httpStatusCode": tag["value"]})
 
     influxdb_query = {
         "bucket": aggregator.get_influxdb_bucket(grafana_result),
         "measurement": aggregator.get_influxdb_measurement(grafana_result),
         "startTime": start_time,
         "stopTime": firing_time,
+        "tagSets": tag_set,
     }
     try:
         influxdb_records = aggregator.get_influxdb_records(incident, influxdb_query)
@@ -213,32 +231,38 @@ def handler(incident: Incident, recipe: Recipe):
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
-
     # get the start and end time of influxdb records
-    first_time, last_time = get_influxdb_start_and_end_time(influxdb_records)
+    first_error_time, last_error_time = get_influxdb_start_and_end_time(influxdb_records)
 
     # _field for error type
     error_num = sum(item[count_key] for item in influxdb_records)
 
     # count how many different error code like 500,501
-    error_code_count = count_metric_by_key(influxdb_records, "_field", count_key)
+    error_code_count = count_metric_by_key(influxdb_records, "httpStatusCode", count_key)
 
     max_region_name, max_region_count = analysis_max_region(influxdb_records)
 
     max_uri, max_method, max_uri_count, confluence_uri_count = analysis_max_url(influxdb_records)
 
-    trend, peak_value, lowest_value, peak_index, lowest_index, time_to_peak_seconds, time_to_lowest_seconds, num_data_points, max_region_first_time, max_region_last_time = analysis_trend(influxdb_records, max_region_name)
+    (
+        trend,
+        peak_value,
+        peak_index,
+        time_to_peak_seconds,
+        num_data_points,
+        max_region_first_time,
+    ) = analysis_trend(influxdb_records, max_region_name)
 
     # query for opensearch
     influxdb_trackingid_name = "WEBEX_TRACKINGID"
     webex_tracking_id_list = list(
         {record[influxdb_trackingid_name] for record in influxdb_records}
     )
-
-    index_pattern_url = aggregator.get_opensearch_index_pattern_url(grafana_result)
+    opensearch_link = aggregator.get_opensearch_link(grafana_result)
+    index_pattern = aggregator.get_opensearch_index_pattern(opensearch_link)
     opensearch_query = {
         "field": {"WEBEX_TRACKINGID": webex_tracking_id_list},
-        "index_pattern": index_pattern_url,
+        "index_pattern": index_pattern,
     }
     try:
         opensearch_records = aggregator.get_opensearch_records(incident, opensearch_query)
@@ -250,6 +274,25 @@ def handler(incident: Incident, recipe: Recipe):
     opensearch_records_len = aggregator.get_total_opensearch_records_num(opensearch_records)
 
     max_userid, max_userid_count, user_id_count = analysis_max_user_id(opensearch_records)
+
+    user_id_tracking_id_list = []
+    for _, record_list in opensearch_records.items():
+        for record in record_list:
+            if record["fields"]["USER_ID"] == max_userid:
+                tracking_id = record["fields"]["WEBEX_TRACKINGID"]
+                if tracking_id not in user_id_tracking_id_list:
+                    user_id_tracking_id_list.append(tracking_id)
+
+    user_id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(
+        opensearch_link, "fields.WEBEX_TRACKINGID", user_id_tracking_id_list, start_time=start_time
+    )
+
+    (
+        sorted_agent_full_name_count,
+        sorted_agent_org_group_count,
+        confluence_log_total_count,
+    ) = analysis_confluence_log(opensearch_records)
+
     # find the example error
     # if the confluence uri is in errors, use error with the uri as the example
     if confluence_uri_count > 0:
@@ -281,7 +324,7 @@ def handler(incident: Incident, recipe: Recipe):
         elif max_metric == "USER_ID":
             for _, record_list in opensearch_records.items():
                 for record in record_list:
-                    if item["fields"]["USER_ID"] == max_userid:
+                    if record["fields"]["USER_ID"] == max_userid:
                         example_opensearch = record
                         break
         else:
@@ -292,8 +335,13 @@ def handler(incident: Incident, recipe: Recipe):
     if example_influxdb is not None:
         example_opensearch = opensearch_records[example_influxdb[influxdb_trackingid_name]][0]
 
+    # get the filter link for id
+
+    # example_opensearch_id = example_opensearch["_id"]
+    # id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(opensearch_link,"_id",[example_opensearch_id])
+
     # format analysis
-    analysis = f"From {first_time} To {last_time}, there are:\n"
+    analysis = f"From {first_error_time} To {last_error_time}, there are:\n"
 
     for error_code, count in error_code_count.items():
         analysis += f"{count} pieces of http {error_code} errors \n"
@@ -301,39 +349,56 @@ def handler(incident: Incident, recipe: Recipe):
     if len(error_code_count) > 1:
         analysis += f"Total of {sum(error_code_count.values())} errors\n"
 
-    analysis += f"Largest percent of region is '{max_region_name}', occur in {max_region_count} ({max_region_count/(error_num)*100}%) of errors \n"
-
-    analysis += f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in {max_uri_count} ({max_uri_count/(error_num)*100}%) of errors \n"
-
-    if max_uri != "calliope/api/v2/venues/{venueId}/confluences" and confluence_uri_count > 0:
-        analysis += f"IMPORTANT! {confluence_uri_count}({confluence_uri_count/(error_num)*100} %) errors occur in uri 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST' \n"
-
-    analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
-    analysis += f"Largest percent of USER ID is '{max_userid}', occur in {max_userid_count} ({max_userid_count/opensearch_records_len*100}%) of opensearch logs\n"
+    analysis += f"Largest percent of region is '{max_region_name}', occur in {max_region_count} ({(round(max_region_count/(error_num)*100,1))}%) of errors \n"
 
     if num_data_points > 1:
-        analysis += f"Trend for 5xx error in max percent region: {trend} \n"
+        analysis += f"Trend for error occured in the region: {trend} \n"
 
-        if peak_index == 0: 
-            analysis += f"Peak value is {peak_value} times from the first data point in max region {max_region_first_time} \n"
-        else:
-            analysis += f"Peak value: {peak_value} times at {time_to_peak_seconds} seconds from the first data point in max region {max_region_first_time} \n"
-       
-        if lowest_index == 0:
-            analysis += f"Lowest value is {lowest_value} times from the first data point in max region {max_region_first_time} \n"
-        else:
-            analysis += f"Lowest value: {lowest_value} times at {time_to_lowest_seconds} seconds from the first data point in max region {max_region_first_time} \n"
+    if peak_index == 0:
+        analysis += f"Peak value for errors in the region: {peak_value}, occured in the first influxdb point at {max_region_first_time} \n"
+    else:
+        analysis += f"Peak value for errors in the region: {peak_value}, occured {time_to_peak_seconds} seconds after the first influxdb point at {max_region_first_time} \n"
+
+    analysis += f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in {max_uri_count} ({round(max_uri_count/(error_num)*100,1)}%) of errors \n"
+
+    if max_uri != "calliope/api/v2/venues/{venueId}/confluences" and confluence_uri_count > 0:
+        analysis += f"IMPORTANT! {confluence_uri_count}({round(confluence_uri_count/(error_num)*100),1} %) errors occur in uri 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST'\n"
+
+    if len(sorted_agent_full_name_count) > 0:
+        analysis += "The list of affected media agents is:\n"
+        main_percentage_total = 0
+        # extract top 2 agent
+        for i in range(2):
+            if i < len(sorted_agent_full_name_count):
+                agent_full_name, agent_full_name_count = sorted_agent_full_name_count[i]
+                full_name_percentage = round(
+                    agent_full_name_count / confluence_log_total_count * 100, 1
+                )
+                main_percentage_total += full_name_percentage
+                analysis += f"{agent_full_name}: ({full_name_percentage}%)\n"
+        if main_percentage_total != 100:
+            analysis += f"other: ({round(100 - main_percentage_total,1)}%)\n"
+
+        org_group_name, org_group_count = sorted_agent_org_group_count[0]
+        org_group_percentage = round(org_group_count / confluence_log_total_count * 100, 1)
+        analysis += f"Largest percent agent org and group is '{org_group_name}' ({org_group_percentage}%)\n"
+
+    analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
+    analysis += f"Largest percent of USER ID is [{max_userid}]({user_id_filter_link}), occur in {max_userid_count} ({round(max_userid_count/opensearch_records_len*100,1)}%) of opensearch logs\n"
 
     analysis += "\n"
     analysis += "Example Error Info: \n"
     example_openseach_field = example_opensearch["fields"]
-    analysis += f"WEBEXTRACKING_ID:{example_openseach_field['WEBEX_TRACKINGID']}\nregion:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}\n"
+    analysis += f"region:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}\n"
 
-    if example_openseach_field.get("stack_trace") is not None:
+    if "stack_trace" in example_openseach_field:
         stack_trace = example_openseach_field["stack_trace"].split("\n")
         # filter all logs that contain com.cisco.wx2
-        filtered_logs = "\n".join([entry for entry in stack_trace if "com.cisco.wx2" in entry])
-        analysis += f"logs: {filtered_logs}\n"
+        filtered_logs = [entry for entry in stack_trace if "com.cisco.wx2" in entry]
+        if len(filtered_logs) > 0:
+            analysis += f"logs: {filtered_logs[0]}\n"
+        elif len(stack_trace) > 0:
+            analysis += f"logs: {stack_trace[0]}\n"
 
     print(analysis)
 

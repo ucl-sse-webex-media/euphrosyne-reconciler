@@ -247,28 +247,67 @@ class DataAggregator(HTTPService):
             result = ""
         return result
 
+    def _parse_tags(self, tag_str):
+        tag_str = tag_str.strip()
+        tag_index = tag_str.find("::tag")
+        space_index = tag_str.find(" ", tag_index + 6)
+        operator = tag_str[tag_index + 6 : space_index]
+        key = tag_str[: tag_index + 5].replace('"', "")
+        value = tag_str[space_index + 1 :]
+        value = value.replace("'", "")
+        return key, value, operator
+
+    def get_influxdb_tags(self, grafana_result):
+        alert_rule = grafana_result["alertRule"]
+        model = alert_rule["data"][0]["model"]
+        tags = model["tags"]
+        if len(tags) != 0:
+            return tags
+        query = model["query"]
+        if "::tag" not in query:
+            return []
+        result = []
+        # alert query configured in query mode
+        where_index = query.find("WHERE (")
+        query = query[where_index + 7 :]
+        parts = query.split("AND")
+        result = []
+        for part in parts:
+            if "OR" in part:
+                # Handle OR conditions within an AND segment
+                or_parts = part.split("OR")
+                for or_part in or_parts:
+                    key, value, operator = self._parse_tags(or_part)
+                    result.append({"key": key, "value": value, "operator": operator})
+            else:
+                key, value, operator = self._parse_tags(part)
+                result.append({"key": key, "value": value, "operator": operator})
+        return [item for item in result if "::tag" in item["key"]]
+
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
         url = self.get_source_url("influxdb")
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
 
-    def get_opensearch_index_pattern_url(self, grafana_result):
-        """Get index pattern from grafana."""
+    def get_opensearch_link(self, grafana_result):
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
             if "indexPattern" in url:
-                startStr = "indexPattern:'"
-                start_index = url.find(startStr) + len(startStr)
-                end_index = url.find("'", start_index)
-                index_pattern_url = url[start_index:end_index]
-                return index_pattern_url
-
+                return url
         return ""
 
+    def get_opensearch_index_pattern(self, opensearch_link):
+        """Get index pattern from grafana."""
+        startStr = "indexPattern:'"
+        start_index = opensearch_link.find(startStr) + len(startStr)
+        end_index = opensearch_link.find("'", start_index)
+        index_pattern_url = opensearch_link[start_index:end_index]
+        return index_pattern_url
+
     def get_opensearch_records(self, incident: Incident, opensearch_query):
-        """Get influxdb records."""
+        """Get opensearch records."""
         url = self.get_source_url("opensearch")
         body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)
@@ -279,3 +318,36 @@ class DataAggregator(HTTPService):
         for _, record_list in opensearch_records.items():
             num += len(record_list)
         return num
+
+    def generate_opensearch_filter_link_is_one_of(
+        self, opensearch_link, filter_key, filter_data_list, start_time="", end_time=""
+    ):
+        if start_time != "":
+            opensearch_link = re.sub(r"from:[^,)]+", f"from:'{start_time}'", opensearch_link)
+        if end_time != "":
+            opensearch_link = re.sub(r"to:[^,)]+", f"to:{end_time}", opensearch_link)
+        index_pattern = self.get_opensearch_index_pattern(opensearch_link)
+        template_index0 = "(match_phrase:({filter_key}:{filter_data}))"
+        template_index_other = "(match_phrase:({filter_key}:'{filter_data}'))"
+        formatted_items = []
+        for index, filter_data in enumerate(filter_data_list):
+            if index == 0:
+                formatted_items.append(
+                    template_index0.format(filter_key=filter_key, filter_data=filter_data)
+                )
+            else:
+                formatted_items.append(
+                    template_index_other.format(filter_key=filter_key, filter_data=filter_data)
+                )
+        params = ",".join([s if i == 0 else f"'{s}'" for i, s in enumerate(filter_data_list)])
+        value = ",%20".join(filter_data_list)
+        should_str = ",".join(formatted_items)
+        query_string = "(filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index:'{index_pattern}',key:{filter_key},negate:!f,params:!({params}),type:phrases,value:'{value}'),query:(bool:(minimum_should_match:1,should:!({should_str}))))),query:(language:kuery,query:''))".format(
+            index_pattern=index_pattern,
+            filter_key=filter_key,
+            params=params,
+            value=value,
+            should_str=should_str,
+        )
+        filter_link = re.sub(r"(&_q).*", f"&_q={query_string}", opensearch_link)
+        return filter_link
