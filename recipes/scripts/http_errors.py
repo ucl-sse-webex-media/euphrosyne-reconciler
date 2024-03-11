@@ -214,10 +214,13 @@ def handler(incident: Incident, recipe: Recipe):
 
     tags = aggregator.get_influxdb_tags(grafana_result)
     tag_set = []
-    for tag in tags:
-        if "httpStatusCode" in tag["key"]:
-            tag_set.append({"httpStatusCode": tag["value"]})
 
+    for tag in tags:
+        key = tag["key"]
+        if "::tag" in key:
+            key = key[: key.find("::tag")]
+        tag_set.append({key: tag["value"]})
+    print(tag_set)
     influxdb_query = {
         "bucket": aggregator.get_influxdb_bucket(grafana_result),
         "measurement": aggregator.get_influxdb_measurement(grafana_result),
@@ -341,31 +344,41 @@ def handler(incident: Incident, recipe: Recipe):
     # id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(opensearch_link,"_id",[example_opensearch_id])
 
     # format analysis
-    analysis = f"From {first_error_time} To {last_error_time}, there are:\n"
+    results.log(f"From {first_error_time} To {last_error_time}, there are:")
 
     for error_code, count in error_code_count.items():
-        analysis += f"{count} pieces of http {error_code} errors \n"
+        results.log(f"{count} pieces of http {error_code} errors")
 
     if len(error_code_count) > 1:
-        analysis += f"Total of {sum(error_code_count.values())} errors\n"
-
-    analysis += f"Largest percent of region is '{max_region_name}', occur in {max_region_count} ({(round(max_region_count/(error_num)*100,1))}%) of errors \n"
+        results.log(f"Total of {sum(error_code_count.values())} errors")
+    results.log("")
+    results.log(
+        f"Largest percent of region is '{max_region_name}', occur in {max_region_count} ({(round(max_region_count/(error_num)*100,1))}%) of errors"
+    )
 
     if num_data_points > 1:
-        analysis += f"Trend for error occured in the region: {trend} \n"
+        results.log(f"Trend for error occured in the region: {trend}")
 
     if peak_index == 0:
-        analysis += f"Peak value for errors in the region: {peak_value}, occured in the first influxdb point at {max_region_first_time} \n"
+        results.log(
+            f"Peak value for errors in the region: {peak_value}, occured in the first influxdb point at {max_region_first_time}\n"
+        )
     else:
-        analysis += f"Peak value for errors in the region: {peak_value}, occured {time_to_peak_seconds} seconds after the first influxdb point at {max_region_first_time} \n"
+        results.log(
+            f"Peak value for errors in the region: {peak_value}, occured {time_to_peak_seconds} seconds after the first influxdb point at {max_region_first_time}\n"
+        )
 
-    analysis += f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in {max_uri_count} ({round(max_uri_count/(error_num)*100,1)}%) of errors \n"
+    results.log(
+        f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in {max_uri_count} ({round(max_uri_count/(error_num)*100,1)}%) of errors"
+    )
 
     if max_uri != "calliope/api/v2/venues/{venueId}/confluences" and confluence_uri_count > 0:
-        analysis += f"IMPORTANT! {confluence_uri_count}({round(confluence_uri_count/(error_num)*100),1} %) errors occur in uri 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST'\n"
+        results.log(
+            f"IMPORTANT! {confluence_uri_count}({round(confluence_uri_count/(error_num)*100),1} %) errors occur in uri 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST'\n"
+        )
 
     if len(sorted_agent_full_name_count) > 0:
-        analysis += "The list of affected media agents is:\n"
+        results.log("The list of affected media agents is:")
         main_percentage_total = 0
         # extract top 2 agent
         for i in range(2):
@@ -375,34 +388,38 @@ def handler(incident: Incident, recipe: Recipe):
                     agent_full_name_count / confluence_log_total_count * 100, 1
                 )
                 main_percentage_total += full_name_percentage
-                analysis += f"{agent_full_name}: ({full_name_percentage}%)\n"
+                results.log(f"{agent_full_name}: ({full_name_percentage}%)")
         if main_percentage_total != 100:
-            analysis += f"other: ({round(100 - main_percentage_total,1)}%)\n"
+            results.log(f"other: ({round(100 - main_percentage_total,1)}%)")
 
         org_group_name, org_group_count = sorted_agent_org_group_count[0]
         org_group_percentage = round(org_group_count / confluence_log_total_count * 100, 1)
-        analysis += f"Largest percent agent org and group is '{org_group_name}' ({org_group_percentage}%)\n"
+        results.log(
+            f"Largest percent agent org and group is '{org_group_name}' ({org_group_percentage}%)\n"
+        )
 
-    analysis += f"{len(user_id_count)} unique USER ID in opensearch logs\n"
-    analysis += f"Largest percent of USER ID is [{max_userid}]({user_id_filter_link}), occur in {max_userid_count} ({round(max_userid_count/opensearch_records_len*100,1)}%) of opensearch logs\n"
+    results.log(f"{len(user_id_count)} unique USER ID in opensearch logs")
+    results.log(
+        f"Largest percent of USER ID is [{max_userid}]({user_id_filter_link}), occur in {max_userid_count} ({round(max_userid_count/opensearch_records_len*100,1)}%) of opensearch logs\n"
+    )
 
-    analysis += "\n"
-    analysis += "Example Error Info: \n"
+    results.log("Example Error Info: ")
     example_openseach_field = example_opensearch["fields"]
-    analysis += f"region:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}\n"
+    results.log(
+        f"region:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}"
+    )
 
     if "stack_trace" in example_openseach_field:
         stack_trace = example_openseach_field["stack_trace"].split("\n")
         # filter all logs that contain com.cisco.wx2
         filtered_logs = [entry for entry in stack_trace if "com.cisco.wx2" in entry]
         if len(filtered_logs) > 0:
-            analysis += f"logs: {filtered_logs[0]}\n"
+            results.log(f"logs: {filtered_logs[0]}")
         elif len(stack_trace) > 0:
-            analysis += f"logs: {stack_trace[0]}\n"
+            results.log(f"logs: {stack_trace[0]}")
 
-    print(analysis)
+    print(results.analysis)
 
-    results.analysis = analysis
     results.status = RecipeStatus.SUCCESSFUL
 
 

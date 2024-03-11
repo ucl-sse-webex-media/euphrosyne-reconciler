@@ -248,41 +248,62 @@ class DataAggregator(HTTPService):
         return result
 
     def _parse_tags(self, tag_str):
-        tag_str = tag_str.strip()
-        tag_index = tag_str.find("::tag")
-        space_index = tag_str.find(" ", tag_index + 6)
-        operator = tag_str[tag_index + 6 : space_index]
-        key = tag_str[: tag_index + 5].replace('"', "")
-        value = tag_str[space_index + 1 :]
-        value = value.replace("'", "")
+        pattern = r"!=|<>|=~|!~|>=|<=|[><=]"
+        match = re.search(pattern, tag_str)
+        if match:
+            start_pos = match.start()
+            key = tag_str[:start_pos].strip().replace('"', "").replace("'", "")
+            if key[0] == "(":
+                key = key[1:]
+            key = key.strip()
+            end_pos = match.end()
+            value = tag_str[end_pos:].strip()
+            if value[-1] == ")":
+                value = value[:-1].strip()
+            # value is string,remove qutation mark
+            if value[0] == "'" or value[0] == '"':
+                value = value[1:-1]
+            # value is int or boolean
+            else:
+                value = value.strip()
+            operator = tag_str[start_pos:end_pos]
+
         return key, value, operator
 
     def get_influxdb_tags(self, grafana_result):
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
-        tags = model["tags"]
-        if len(tags) != 0:
-            return tags
+        if "tags" in model and len(model["tags"]) != 0:
+            return model["tags"]
         query = model["query"]
-        if "::tag" not in query:
-            return []
         result = []
+        if "WHERE" not in query:
+            return result
         # alert query configured in query mode
-        where_index = query.find("WHERE (")
-        query = query[where_index + 7 :]
-        parts = query.split("AND")
-        result = []
+        where_index = query.find("WHERE")
+        query = query[where_index + 6 :]
+        # the possible query str after where part
+        if "$timeFilter" in query:
+            index = query.find("$timeFilter")
+            query = query[:index]
+        elif "GROUP BY" in query.upper():
+            index = query.upper().find("GROUP BY")
+            query = query[:index]
+        query = query.replace("and ", "AND ").replace("or ", "OR ")
+        parts = query.split("AND ")
         for part in parts:
-            if "OR" in part:
+            if part.strip() == "":
+                continue
+            if "OR " in part:
                 # Handle OR conditions within an AND segment
-                or_parts = part.split("OR")
+                or_parts = part.split("OR ")
                 for or_part in or_parts:
                     key, value, operator = self._parse_tags(or_part)
                     result.append({"key": key, "value": value, "operator": operator})
             else:
                 key, value, operator = self._parse_tags(part)
                 result.append({"key": key, "value": value, "operator": operator})
-        return [item for item in result if "::tag" in item["key"]]
+        return result
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """Get influxdb records."""
