@@ -32,7 +32,7 @@ spec:
             - --recipe-timeout
             - "300"
             - --recipe-namespace
-            - usernamespace
+            -  "default"
           ports:
             - containerPort: 8080
             - containerPort: 8081
