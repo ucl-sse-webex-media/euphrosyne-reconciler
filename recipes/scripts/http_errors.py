@@ -220,7 +220,6 @@ def handler(incident: Incident, recipe: Recipe):
         if "::tag" in key:
             key = key[: key.find("::tag")]
         tag_set.append({key: tag["value"]})
-    print(tag_set)
     influxdb_query = {
         "bucket": aggregator.get_influxdb_bucket(grafana_result),
         "measurement": aggregator.get_influxdb_measurement(grafana_result),

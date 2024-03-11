@@ -131,6 +131,15 @@ func handleActionsRequest(c *gin.Context, config *Config) {
 		return
 	}
 
+	if status, ok := data["status"].(string); ok {
+		if status != "firing"{
+			return
+		}
+	} else {
+		logger.Error("No status field in alert data")
+		return 
+	}
+
 	logger.Info("Action response received", zap.Any("request", data))
 	go StartRecipeExecutor(c, config, &data, Actions)
 
