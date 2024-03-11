@@ -348,19 +348,15 @@ class DataAggregator(HTTPService):
         if end_time != "":
             opensearch_link = re.sub(r"to:[^,)]+", f"to:{end_time}", opensearch_link)
         index_pattern = self.get_opensearch_index_pattern(opensearch_link)
-        template_index0 = "(match_phrase:({filter_key}:{filter_data}))"
-        template_index_other = "(match_phrase:({filter_key}:'{filter_data}'))"
+        template_index = "(match_phrase:({filter_key}:{filter_data}))"
+        template_index_with_digit = "(match_phrase:({filter_key}:'{filter_data}'))"
         formatted_items = []
-        for index, filter_data in enumerate(filter_data_list):
-            if index == 0:
-                formatted_items.append(
-                    template_index0.format(filter_key=filter_key, filter_data=filter_data)
-                )
+        for filter_data in filter_data_list:
+            if filter_data[0].isdigit(): 
+                template_index_with_digit.format(filter_key=filter_key, filter_data=filter_data)
             else:
-                formatted_items.append(
-                    template_index_other.format(filter_key=filter_key, filter_data=filter_data)
-                )
-        params = ",".join([s if i == 0 else f"'{s}'" for i, s in enumerate(filter_data_list)])
+                template_index.format(filter_key=filter_key, filter_data=filter_data)
+        params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
         should_str = ",".join(formatted_items)
         query_string = "(filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index:'{index_pattern}',key:{filter_key},negate:!f,params:!({params}),type:phrases,value:'{value}'),query:(bool:(minimum_should_match:1,should:!({should_str}))))),query:(language:kuery,query:''))".format(
