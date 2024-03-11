@@ -88,10 +88,8 @@ func main() {
 		return
 	}
 
-	flag := CheckNamespaceAccess(config.RecipeNamespace)
-	if !flag {
-		logger.Info("RecipeNamepsace failed checkAccessForRules,setting to ReconcilerNamespace")
-		config.RecipeNamespace = config.ReconcilerNamespace
+	if !CheckNamespaceAccess(config.ReconcilerNamespace) {
+		panic("Failed to get access to the namespace")
 	}
 
 	go StartAlertHandler(&config)

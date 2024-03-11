@@ -19,6 +19,7 @@ const (
 	RedisAddress      = "localhost:6379"
 	WebexBotAddress   = "localhost:7001"
 	RecipeTimeout     = 300
+	RecipeNamespace   = "default"
 )
 
 // Rule represents a single rule from a Role or ClusterRole in Kubernetes RBAC.
@@ -42,6 +43,7 @@ func ParseConfig(args []string) Config {
 	v.SetDefault("redis-address", RedisAddress)
 	v.SetDefault("webex-bot-address", WebexBotAddress)
 	v.SetDefault("recipe-timeout", RecipeTimeout)
+	v.SetDefault("recipe-namespace", RecipeNamespace)
 
 	v.AutomaticEnv()
 
@@ -88,6 +90,7 @@ func getReconcilerNamespace() string {
 	return "default"
 }
 
+// Check if the reconciler has the necessary permissions in the specified namespace.
 func CheckNamespaceAccess(namespace string) bool {
 	rules := []Rule{
 		{
@@ -134,8 +137,7 @@ func checkAccessForRules(clientset *kubernetes.Clientset, rules []Rule, namespac
 
 					response, err := clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(context.TODO(), sar, metav1.CreateOptions{})
 					if err != nil || !response.Status.Allowed {
-						msg := fmt.Sprintf("Access to %v '%v' in namespace '%v' with verb '%v' DENIED or ERROR: %v", group, resource, namespace, verb, err)
-						errorMessages = append(errorMessages, msg)
+						return false, fmt.Sprintf("An access check failed in namespace %s", namespace)
 					}
 				}
 			}

@@ -82,3 +82,29 @@ kubectl create secret generic euphrosyne-keys \
   --from-literal=jira-user=<your Jira username> \
   --from-literal=jira-token=<your Jira token>
 ```
+
+### Configuring Euphrosyne Reconciler in a different namespace
+To configure the Euphrosyne Reconciler to run in a different namespace <reconciler-namespace> and the recipe 
+jobs to run in another namespace <recipe-namespace>, you'll need to edit redis address and recipe namespace in the [`reconciler/manifests/deployment.yaml`] 
+file as follows:
+
+```yaml
+command:
+   - /reconciler
+args:
+   - --redis-address
+   - euphrosyne-reconciler-redis.<reconciler-namespace>.svc.cluster.local:80
+   - --recipe-namespace
+   - <recipe-namespace>
+```
+
+As the K8 secrets are namespaced resources, and is needed to create jobs in <recipe-namespace>, the secret is 
+needed to be created in the <recipe-namespace>
+
+```bash
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-url=<your Jira server URL> \
+  --from-literal=jira-user=<your Jira username> \
+  --from-literal=jira-token=<your Jira token>
+  -n <recipe-namespace>
+```
