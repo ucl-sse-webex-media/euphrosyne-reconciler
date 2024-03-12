@@ -38,7 +38,7 @@ def count_metric_by_key(record_list, metric, count_key):
 
 
 def analysis_max_region(influxdb_records):
-    # find the largest percentage of region(environment)
+    """find the largest percentage of region(environment)"""
     region_count = count_metric_by_key(influxdb_records, "environment", count_key)
     max_region_name = max(region_count, key=region_count.get)
     max_region_count = region_count[max_region_name]
@@ -46,6 +46,7 @@ def analysis_max_region(influxdb_records):
 
 
 def analysis_max_url(influxdb_records):
+    """analysis max percent url and method, and find the confluence uri count"""
     uri_count = {}
     confluence_uri_count = 0
     # {uri:{method:count}}
@@ -78,6 +79,7 @@ def analysis_max_url(influxdb_records):
 
 
 def analysis_max_user_id(opensearch_records):
+    """analysis max percent user id in opensearch records"""
     user_id_list = []
     for _, record_list in opensearch_records.items():
         for record in record_list:
@@ -91,6 +93,7 @@ def analysis_max_user_id(opensearch_records):
 
 
 def analysis_confluence_log(opensearch_records):
+    """analysis confluence log"""
     confluence_log_list = []
     for _, record_list in opensearch_records.items():
         for record in record_list:
@@ -131,6 +134,7 @@ def analysis_confluence_log(opensearch_records):
 
 
 def analysis_trend(influxdb_records, max_region):
+    """analysis the trend of the error in the max region"""
     # Filter records for the specified max_region
     max_region_records = [
         record for record in influxdb_records if record["environment"] == max_region
@@ -342,7 +346,6 @@ def handler(incident: Incident, recipe: Recipe):
     # example_opensearch_id = example_opensearch["_id"]
     # id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(opensearch_link,"_id",[example_opensearch_id])
 
-    # format analysis
     results.log(f"From {first_error_time} To {last_error_time}, there are:")
 
     for error_code, count in error_code_count.items():
@@ -417,7 +420,7 @@ def handler(incident: Incident, recipe: Recipe):
         elif len(stack_trace) > 0:
             results.log(f"logs: {stack_trace[0]}")
 
-    print(results.analysis)
+    logger.info("analysis:", results.analysis)
 
     results.status = RecipeStatus.SUCCESSFUL
 

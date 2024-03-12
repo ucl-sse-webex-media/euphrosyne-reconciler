@@ -248,6 +248,7 @@ class DataAggregator(HTTPService):
         return result
 
     def _parse_tags(self, tag_str):
+        """Parse tags and values by operator."""
         pattern = r"!=|<>|=~|!~|>=|<=|[><=]"
         match = re.search(pattern, tag_str)
         if match:
@@ -271,6 +272,7 @@ class DataAggregator(HTTPService):
         return key, value, operator
 
     def get_influxdb_tags(self, grafana_result):
+        """Get influxdb tags from alert rule."""
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         if "tags" in model and len(model["tags"]) != 0:
@@ -312,6 +314,7 @@ class DataAggregator(HTTPService):
         return self.post(url, body=body)
 
     def get_opensearch_link(self, grafana_result):
+        """Get opensearch link."""
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
@@ -343,6 +346,7 @@ class DataAggregator(HTTPService):
     def generate_opensearch_filter_link_is_one_of(
         self, opensearch_link, filter_key, filter_data_list, start_time="", end_time=""
     ):
+        """Generate opensearch filter link that the value of filter_key is one of filter_data_list."""
         if start_time != "":
             opensearch_link = re.sub(r"from:[^,)]+", f"from:'{start_time}'", opensearch_link)
         if end_time != "":
@@ -352,10 +356,16 @@ class DataAggregator(HTTPService):
         template_index_with_digit = "(match_phrase:({filter_key}:'{filter_data}'))"
         formatted_items = []
         for filter_data in filter_data_list:
-            if filter_data[0].isdigit(): 
-                formatted_items.append(template_index_with_digit.format(filter_key=filter_key, filter_data=filter_data))
+            if filter_data[0].isdigit():
+                formatted_items.append(
+                    template_index_with_digit.format(
+                        filter_key=filter_key, filter_data=filter_data
+                    )
+                )
             else:
-                formatted_items.append(template_index.format(filter_key=filter_key, filter_data=filter_data))
+                formatted_items.append(
+                    template_index.format(filter_key=filter_key, filter_data=filter_data)
+                )
         params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
         should_str = ",".join(formatted_items)
