@@ -353,9 +353,9 @@ class DataAggregator(HTTPService):
         formatted_items = []
         for filter_data in filter_data_list:
             if filter_data[0].isdigit(): 
-                template_index_with_digit.format(filter_key=filter_key, filter_data=filter_data)
+                formatted_items.append(template_index_with_digit.format(filter_key=filter_key, filter_data=filter_data))
             else:
-                template_index.format(filter_key=filter_key, filter_data=filter_data)
+                formatted_items.append(template_index.format(filter_key=filter_key, filter_data=filter_data))
         params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
         should_str = ",".join(formatted_items)
