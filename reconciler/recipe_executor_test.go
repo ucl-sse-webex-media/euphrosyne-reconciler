@@ -164,7 +164,7 @@ func TestRecipeExecutor(t *testing.T) {
 		createTestNamespace()
 	}
 	// create a data ConfigMap for the test recipes
-	dataConfigMap, err = createConfigMap(alertData, incidentUuid, &testConfig)
+	dataConfigMap, err = createConfigMap(alertData, incidentUuid, testConfig.RecipeNamespace)
 	if err != nil {
 		panic(err)
 	}
@@ -189,7 +189,7 @@ func testGetRecipeConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType, false, &testConfig)
+		recipe, err := getRecipesFromConfigMap(requestType, false, testConfig.RecipeNamespace)
 		assert.Nil(t, err)
 		assert.Equal(t, len(testRecipeMap), len(recipe))
 
@@ -199,7 +199,7 @@ func testGetRecipeConfig(t *testing.T) {
 
 	// Test that the recipe executor can retrieve only enabled recipes from the ConfigMap.
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType, true, &testConfig)
+		recipe, err := getRecipesFromConfigMap(requestType, true, testConfig.ReconcilerNamespace)
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(recipe))
 
@@ -214,7 +214,7 @@ func testCreateConfigMap(t *testing.T) {
 		deleteConfigMap(configMapName, testNamespace)
 	}()
 
-	configMap, err := createConfigMap(alertData, incidentUuid, &testConfig)
+	configMap, err := createConfigMap(alertData, incidentUuid, testConfig.RecipeNamespace)
 	assert.Nil(t, err)
 
 	configMapName = configMap.Name

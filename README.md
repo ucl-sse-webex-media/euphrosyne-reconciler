@@ -75,7 +75,7 @@ kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
 In order for the Euphrosyne Reconciler to be able to interact with external services, we load the
 corresponding credentials from Kubernetes secrets. Please run the following command, providing your
-own credentials for accessing Jira:
+own credentials for accessing Jira. As no namespace is specified these will be deployed in the default namespace:
 
 ```bash
 kubectl create secret generic euphrosyne-keys \
