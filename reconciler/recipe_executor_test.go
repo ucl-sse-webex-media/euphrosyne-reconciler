@@ -13,22 +13,18 @@ import (
 )
 
 const (
-	testConfigMapName     = "orpheus-operator-recipes-test"
-	testNamespace         = "orpheus-test"
-	imageName             = "maikeee32e/euphrosyne-recipes-test:latest"
-	testAggregatorAddress = "localhost:8080"
-	testRedisAddress      = "localhost:6379"
-	testWebexBotAddress   = "localhost:7001"
-	testRecipeTimeout     = 300
+	testConfigMapName = "orpheus-operator-recipes-test"
+	testNamespace     = "orpheus-test"
+	imageName         = "maikeee32e/euphrosyne-recipes-test:latest"
 )
 
 var testConfig = Config{
-	AggregatorAddress:   testAggregatorAddress,
-	RedisAddress:        testRedisAddress,
-	WebexBotAddress:     testWebexBotAddress,
-	RecipeTimeout:       testRecipeTimeout,
-	RecipeNamespace:     testNamespace,
-	ReconcilerNamespace: testNamespace,
+	AggregatorAddress:   "localhost:8080",
+	RedisAddress:        "localhost:6379",
+	WebexBotAddress:     "localhost:7001",
+	RecipeTimeout:       300,
+	RecipeNamespace:     "orpheus-test",
+	ReconcilerNamespace: "orpheus-test",
 }
 var recipe_1 = Recipe{
 	Config: &RecipeConfig{

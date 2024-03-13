@@ -95,8 +95,8 @@ func getRecipesFromConfigMap(
 }
 
 // Create a Kubernetes ConfigMap for the recipe data.
-func createConfigMap(data *map[string]interface{}, uuid string, config *Config) (*corev1.ConfigMap, error) {
-	cmClient := clientset.CoreV1().ConfigMaps(config.RecipeNamespace)
+func createConfigMap(data *map[string]interface{}, uuid string, recipeNameSpace string) (*corev1.ConfigMap, error) {
+	cmClient := clientset.CoreV1().ConfigMaps(recipeNameSpace)
 
 	//Marshal the data into JSON format
 	dataJSON, err := json.Marshal(data)
@@ -108,7 +108,7 @@ func createConfigMap(data *map[string]interface{}, uuid string, config *Config) 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "euphrosyne-recipes-",
-			Namespace:    config.RecipeNamespace,
+			Namespace:    recipeNameSpace,
 			Labels: map[string]string{
 				"app":  "euphrosyne",
 				"uuid": uuid,
@@ -244,7 +244,7 @@ func createJob(
 func runDebuggingRecipes(
 	uuid string, recipes map[string]Recipe, data *map[string]interface{}, config *Config,
 ) error {
-	cm, err := createConfigMap(data, uuid, config)
+	cm, err := createConfigMap(data, uuid, config.RecipeNamespace)
 	if err != nil {
 		logger.Error("Failed to create ConfigMap", zap.Error(err))
 		return err
@@ -278,7 +278,7 @@ func runActionRecipes(
 				actionData[k] = v
 			}
 			actionData["uuid"] = uuid
-			cm, err := createConfigMap(&actionData, uuid, config)
+			cm, err := createConfigMap(&actionData, uuid, config.RecipeNamespace)
 			if err != nil {
 				logger.Error("Failed to create ConfigMap", zap.Error(err))
 				return err

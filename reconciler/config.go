@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	AggregatorAddress = "localhost:8080"
-	RedisAddress      = "localhost:6379"
-	WebexBotAddress   = "localhost:7001"
-	RecipeTimeout     = 300
-	RecipeNamespace   = "default"
+	AggregatorAddress   = "localhost:8080"
+	RedisAddress        = "localhost:6379"
+	WebexBotAddress     = "localhost:7001"
+	RecipeTimeout       = 300
+	ReconcilerNamespace = "default"
 )
 
 // Rule represents a single rule from a Role or ClusterRole in Kubernetes RBAC.
@@ -38,12 +38,18 @@ func ParseConfig(args []string) Config {
 	v.AddConfigPath(".")
 	v.SetConfigType("yaml")
 
+	reconcilerNamespace, err := getReconcilerNamespace()
+	if err != nil {
+		logger.Error("Failed to retrieve ReconcilerNamespace using default namespace")
+		reconcilerNamespace = ReconcilerNamespace
+	}
 	// Set default values
+	v.SetDefault("reconcilerNamespace", reconcilerNamespace)
+	v.SetDefault("recipe-namespace", reconcilerNamespace)
 	v.SetDefault("aggregator-address", AggregatorAddress)
 	v.SetDefault("redis-address", RedisAddress)
 	v.SetDefault("webex-bot-address", WebexBotAddress)
 	v.SetDefault("recipe-timeout", RecipeTimeout)
-	v.SetDefault("recipe-namespace", RecipeNamespace)
 
 	v.AutomaticEnv()
 
@@ -65,29 +71,26 @@ func ParseConfig(args []string) Config {
 		WebexBotAddress:     v.GetString("webex-bot-address"),
 		RecipeTimeout:       v.GetInt("recipe-timeout"),
 		RecipeNamespace:     v.GetString("recipe-namespace"),
-		ReconcilerNamespace: getReconcilerNamespace(),
-	}
-	if config.ReconcilerNamespace == "default" {
-		fmt.Println("Failed to retreive ReconcilerNamespace, using default namespace")
+		ReconcilerNamespace: v.GetString("reconcilerNamespace"),
 	}
 	return config
 }
 
-func getReconcilerNamespace() string {
+func getReconcilerNamespace() (string, error) {
 	// First, try to read from the Kubernetes service account namespace file
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err == nil {
-		return string(ns)
+		return string(ns), nil
 	}
 
 	// If reading the file fails, fallback to checking an environment variable
 	envNamespace := os.Getenv("RECONCILER_NAMESPACE")
 	if envNamespace != "" {
-		return envNamespace
+		return envNamespace, nil
 	}
 
 	// If neither method works, fallback to a default namespace
-	return "default"
+	return "", fmt.Errorf("Failed to retrieve namespace from Reconciler")
 }
 
 // Check if the reconciler has the necessary permissions in the specified namespace.
