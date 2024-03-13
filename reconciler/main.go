@@ -73,7 +73,6 @@ func connectRedis(config *Config) {
 func main() {
 	config := ParseConfig(os.Args[1:])
 	httpc = getHTTPClient()
-
 	var err error
 	initLogger()
 
@@ -87,6 +86,10 @@ func main() {
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
+	}
+
+	if !CheckNamespaceAccess(config.ReconcilerNamespace) {
+		panic("Failed to get access to the namespace")
 	}
 
 	go StartAlertHandler(&config)

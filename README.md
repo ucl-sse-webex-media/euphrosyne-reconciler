@@ -60,21 +60,22 @@ In order to setup the Euphrosyne Reconciler you will need a working Kubernetes c
 `kubectl` configured to communicate with the API Server. An easy way to get started is `microk8s`.
 
 To apply the Kubernetes manifests responsible for setting up the Reconciler on Kubernetes, run the
-following (recursively applying all YAML files inside the `manifests` directory):
+following (recursively applying all YAML files inside the `manifests` directory). As no namespace is 
+specified these will be deployed in the default namespace :
 
 ```bash
 kubectl apply -f reconciler/manifests -R
 ```
 
-You will also need to apply the ConfigMap containing the list of available recipes:
+You will also need to apply the ConfigMap containing the list of available recipes. As no namespace is 
+specified this will be deployed in the default namespace:
 
 ```bash
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
-
 In order for the Euphrosyne Reconciler to be able to interact with external services, we load the
 corresponding credentials from Kubernetes secrets. Please run the following command, providing your
-own credentials for accessing Jira:
+own credentials for accessing Jira. As no namespace is specified this will be deployed in the default namespace:
 
 ```bash
 kubectl create secret generic euphrosyne-keys \
@@ -82,3 +83,54 @@ kubectl create secret generic euphrosyne-keys \
   --from-literal=jira-user=<your Jira username> \
   --from-literal=jira-token=<your Jira token>
 ```
+
+To configure the Euphrosyne Reconciler to run in a different namespace &lt;reconciler-namespace&gt; and the recipe 
+jobs to run in another namespace &lt;recipe-namespace&gt;, you'll need to edit redis address and recipe namespace in the [`reconciler/manifests/deployment.yaml`] 
+file as follows:
+
+```yaml
+      #Replace the following
+         command:
+            - /reconciler
+          args:
+            - euphrosyne-reconciler-redis.default.svc.cluster.local:80
+            - --recipe-timeout
+            - "300"
+            - --recipe-namespace
+            -  default
+
+      #with
+          command:
+            - /reconciler
+          args:
+            - euphrosyne-reconciler-redis.<reconciler-namespace>.svc.cluster.local:80
+            - --recipe-timeout
+            - "300"
+            - --recipe-namespace
+            -  <recipe-namespace>
+```
+
+To apply the Kubernetes manifests in different namespace &lt;reconciler-namespace&gt;, run the
+following (recursively applying all YAML files inside the `manifests` directory):
+
+```bash
+kubectl -n <reconciler-namespace> apply -f reconciler/manifests -R
+```
+
+You will also need to apply the ConfigMap containing the list of available recipes to the different namespace &lt;reconciler-namespace&gt;:
+
+```bash
+kubectl -n <reconciler-namespace> apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
+```
+
+As the K8 secrets are namespaced resources, and is needed to create jobs in &lt;recipe-namespace&gt;, the secret is 
+needed to be created in the &lt;recipe-namespace&gt;
+
+```bash
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-url=<your Jira server URL> \
+  --from-literal=jira-user=<your Jira username> \
+  --from-literal=jira-token=<your Jira token>
+  -n <recipe-namespace>
+```
+
