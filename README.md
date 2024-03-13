@@ -110,7 +110,7 @@ file as follows:
             -  <recipe-namespace>
 ```
 
-To apply the Kubernetes manifests in the different namespace &lt;reconciler-namespace&gt;, run the
+To apply the Kubernetes manifests in different namespace &lt;reconciler-namespace&gt;, run the
 following (recursively applying all YAML files inside the `manifests` directory):
 
 ```bash
