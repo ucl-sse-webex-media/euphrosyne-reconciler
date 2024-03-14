@@ -94,8 +94,8 @@ By default, recipes are created and run in the same namespace where the Reconcil
 which might not be desired, due to security implications. In order to successfully configure the
 Reconciler to run recipes elsewhere, you need to ensure that it has the necessary permissions in
 the target recipe. The first step is to create the required Role and RoleBinding. You will have to
-edit the command below replacing &lt;recipe-namespace&gt; and &lt;reconciler-namespace&gt; with the
-actual namespaces:
+edit the command below replacing `<recipe-namespace>` and `<reconciler-namespace>` with the actual
+namespaces:
 
 ```bash
 kubectl apply -f - -n <recipe-namespace> <<EOF
@@ -143,7 +143,7 @@ EOF
 ```
 
 Subsequently, you'll have to edit the [deployment manifest](./reconciler/manifests/deployment.yaml)
-specifying the &lt;recipe-namespace&gt;:
+specifying the `<recipe-namespace>`:
 
 ```diff
 --- a/reconciler/manifests/deployment.yaml
@@ -160,7 +160,7 @@ specifying the &lt;recipe-namespace&gt;:
 ```
 
 Finally, you'll have to apply the Deployment again (or all of the manifests if you haven't done so
-already):
+already), replacing `<recipe-namespace>` and `<reconciler-namespace>` with the actual namespaces:
 
 ```bash
 kubectl apply -f reconciler/manifests -R -n <reconciler-namespace>
