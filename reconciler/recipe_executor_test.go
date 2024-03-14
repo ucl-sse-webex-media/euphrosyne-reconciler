@@ -23,9 +23,10 @@ var testConfig = Config{
 	RedisAddress:        "localhost:6379",
 	WebexBotAddress:     "localhost:7001",
 	RecipeTimeout:       300,
-	RecipeNamespace:     "orpheus-test",
-	ReconcilerNamespace: "orpheus-test",
+	RecipeNamespace:     testNamespace,
+	ReconcilerNamespace: testNamespace,
 }
+
 var recipe_1 = Recipe{
 	Config: &RecipeConfig{
 		Enabled:     false,
@@ -141,6 +142,9 @@ func deleteNamespace(name string) {
 func init() {
 	initLogger()
 
+	// FIXME: This is a hack, since the ConfigMap name is hardcoded in the reconciler
+	configMapName = testConfigMapName
+
 	var err error
 	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
@@ -189,7 +193,7 @@ func testGetRecipeConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType, false, testConfig.RecipeNamespace)
+		recipe, err := getRecipesFromConfigMap(requestType, false, testConfig.ReconcilerNamespace)
 		assert.Nil(t, err)
 		assert.Equal(t, len(testRecipeMap), len(recipe))
 

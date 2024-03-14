@@ -64,9 +64,9 @@ func StartRecipeExecutor(
 
 // Retrieve recipes from ConfigMap, optionally filtering by enabled status.
 func getRecipesFromConfigMap(
-	requestType RequestType, filterEnabled bool, reconcilerNameSpace string,
+	requestType RequestType, filterEnabled bool, namespace string,
 ) (map[string]Recipe, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(reconcilerNameSpace).Get(
+	configMap, err := clientset.CoreV1().ConfigMaps(namespace).Get(
 		context.TODO(), configMapName, metav1.GetOptions{},
 	)
 	if err != nil {
@@ -95,8 +95,10 @@ func getRecipesFromConfigMap(
 }
 
 // Create a Kubernetes ConfigMap for the recipe data.
-func createConfigMap(data *map[string]interface{}, uuid string, recipeNameSpace string) (*corev1.ConfigMap, error) {
-	cmClient := clientset.CoreV1().ConfigMaps(recipeNameSpace)
+func createConfigMap(
+	data *map[string]interface{}, uuid string, namespace string,
+) (*corev1.ConfigMap, error) {
+	cmClient := clientset.CoreV1().ConfigMaps(namespace)
 
 	//Marshal the data into JSON format
 	dataJSON, err := json.Marshal(data)
@@ -108,7 +110,7 @@ func createConfigMap(data *map[string]interface{}, uuid string, recipeNameSpace 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "euphrosyne-recipes-",
-			Namespace:    recipeNameSpace,
+			Namespace:    namespace,
 			Labels: map[string]string{
 				"app":  "euphrosyne",
 				"uuid": uuid,
