@@ -67,6 +67,15 @@ is specified, these will be deployed in the configured default namespace:
 kubectl apply -f reconciler/manifests -R
 ```
 
+If you wish to deploy the Reconciler in a different namespace you'll have to update the Redis
+address accordingly before applying the manifests (replacing `<reconciler-namespace>` with your
+desired namespace):
+
+```bash
+sed -i /euphrosyne-reconciler-redis.default.svc.cluster.local/s/default/<reconciler-namespace>/g \
+  reconciler/manifests/deployment.yaml
+```
+
 You will also need to apply the ConfigMap containing the list of available recipes. If no namespace
 is specified, this will be deployed in the configured default namespace:
 
@@ -164,6 +173,8 @@ already), as well as the Secret, replacing `<recipe-namespace>` and `<reconciler
 the actual namespaces:
 
 ```bash
+sed -i /euphrosyne-reconciler-redis.default.svc.cluster.local/s/default/<reconciler-namespace>/g \
+  reconciler/manifests/deployment.yaml
 kubectl apply -f reconciler/manifests -R -n <reconciler-namespace>
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml -n <reconciler-namespace>
 kubectl create secret generic euphrosyne-keys \
