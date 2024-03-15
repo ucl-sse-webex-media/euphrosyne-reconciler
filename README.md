@@ -60,25 +60,126 @@ In order to setup the Euphrosyne Reconciler you will need a working Kubernetes c
 `kubectl` configured to communicate with the API Server. An easy way to get started is `microk8s`.
 
 To apply the Kubernetes manifests responsible for setting up the Reconciler on Kubernetes, run the
-following (recursively applying all YAML files inside the `manifests` directory):
+following (recursively applying all YAML files inside the `manifests` directory). If no namespace
+is specified, these will be deployed in the configured default namespace:
 
 ```bash
 kubectl apply -f reconciler/manifests -R
 ```
 
-You will also need to apply the ConfigMap containing the list of available recipes:
+If you wish to deploy the Reconciler in a different namespace you'll have to update the Redis
+address accordingly before applying the manifests (replacing `<reconciler-namespace>` with your
+desired namespace):
+
+```bash
+sed -i /euphrosyne-reconciler-redis.default.svc.cluster.local/s/default/<reconciler-namespace>/g \
+  reconciler/manifests/deployment.yaml
+```
+
+You will also need to apply the ConfigMap containing the list of available recipes. If no namespace
+is specified, this will be deployed in the configured default namespace:
 
 ```bash
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 ```
 
+### Configuring Kubernetes Secrets
+
 In order for the Euphrosyne Reconciler to be able to interact with external services, we load the
 corresponding credentials from Kubernetes secrets. Please run the following command, providing your
-own credentials for accessing Jira:
+own credentials for accessing Jira. If no namespace is specified this will be created in the
+configured default namespace:
 
 ```bash
 kubectl create secret generic euphrosyne-keys \
   --from-literal=jira-url=<your Jira server URL> \
   --from-literal=jira-user=<your Jira username> \
   --from-literal=jira-token=<your Jira token>
+```
+
+### Configuring a different namespace for executing recipes
+
+By default, recipes are created and run in the same namespace where the Reconciler is deployed,
+which might not be desired, due to security implications. In order to successfully configure the
+Reconciler to run recipes elsewhere, you need to ensure that it has the necessary permissions in
+the target recipe. The first step is to create the required Role and RoleBinding. You will have to
+edit the command below replacing `<recipe-namespace>` and `<reconciler-namespace>` with the actual
+namespaces:
+
+```bash
+kubectl apply -f - -n <recipe-namespace> <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
+  name: euphrosyne-reconciler-recipes
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - deletecollection
+- apiGroups:
+  - "batch"
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - create
+  - deletecollection
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: orpheus-operator
+    component: euphrosyne-reconciler
+  name: euphrosyne-reconciler-recipes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: euphrosyne-reconciler-recipes
+subjects:
+- kind: ServiceAccount
+  name: euphrosyne-reconciler
+  namespace: <reconciler-namespace>
+EOF
+```
+
+Subsequently, you'll have to edit the [deployment manifest](./reconciler/manifests/deployment.yaml)
+specifying the `<recipe-namespace>`:
+
+```diff
+--- a/reconciler/manifests/deployment.yaml
++++ b/reconciler/manifests/deployment.yaml
+@@ -31,6 +31,8 @@ spec:
+             - euphrosyne-reconciler-redis.default.svc.cluster.local:80
+             - --recipe-timeout
+             - "300"
++            - --recipe-namespace
++            - <recipe-namespace>
+           ports:
+             - containerPort: 8080
+             - containerPort: 8081
+```
+
+Finally, you'll have to apply the Deployment again (or all of the manifests if you haven't done so
+already), as well as the Secret, replacing `<recipe-namespace>` and `<reconciler-namespace>` with
+the actual namespaces:
+
+```bash
+sed -i /euphrosyne-reconciler-redis.default.svc.cluster.local/s/default/<reconciler-namespace>/g \
+  reconciler/manifests/deployment.yaml
+kubectl apply -f reconciler/manifests -R -n <reconciler-namespace>
+kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml -n <reconciler-namespace>
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-url=<your Jira server URL> \
+  --from-literal=jira-user=<your Jira username> \
+  --from-literal=jira-token=<your Jira token> \
+  -n <recipe-namespace>
 ```

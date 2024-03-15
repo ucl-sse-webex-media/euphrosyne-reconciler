@@ -18,6 +18,15 @@ const (
 	imageName         = "maikeee32e/euphrosyne-recipes-test:latest"
 )
 
+var testConfig = Config{
+	AggregatorAddress:   "localhost:8080",
+	RedisAddress:        "localhost:6379",
+	WebexBotAddress:     "localhost:7001",
+	RecipeTimeout:       300,
+	RecipeNamespace:     testNamespace,
+	ReconcilerNamespace: testNamespace,
+}
+
 var recipe_1 = Recipe{
 	Config: &RecipeConfig{
 		Enabled:     false,
@@ -133,9 +142,9 @@ func deleteNamespace(name string) {
 func init() {
 	initLogger()
 
-	reconcilerNamespace = testNamespace
+	// FIXME: This is a hack, since the ConfigMap name is hardcoded in the reconciler
 	configMapName = testConfigMapName
-	recipeNamespace = testNamespace
+
 	var err error
 	clientset, err = InitialiseKubernetesClient()
 	if err != nil {
@@ -146,7 +155,7 @@ func init() {
 	c, _ = gin.CreateTestContext(w)
 
 	// make sure redis is running
-	connectRedis(&Config{RedisAddress: "localhost:6379"})
+	connectRedis(&testConfig)
 }
 
 // Test all recipe executor functions.
@@ -159,7 +168,7 @@ func TestRecipeExecutor(t *testing.T) {
 		createTestNamespace()
 	}
 	// create a data ConfigMap for the test recipes
-	dataConfigMap, err = createConfigMap(alertData, incidentUuid)
+	dataConfigMap, err = createConfigMap(alertData, incidentUuid, testConfig.RecipeNamespace)
 	if err != nil {
 		panic(err)
 	}
@@ -184,7 +193,7 @@ func testGetRecipeConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType, false)
+		recipe, err := getRecipesFromConfigMap(requestType, false, testConfig.ReconcilerNamespace)
 		assert.Nil(t, err)
 		assert.Equal(t, len(testRecipeMap), len(recipe))
 
@@ -194,7 +203,7 @@ func testGetRecipeConfig(t *testing.T) {
 
 	// Test that the recipe executor can retrieve only enabled recipes from the ConfigMap.
 	for _, requestType := range []RequestType{Actions, Alert} {
-		recipe, err := getRecipesFromConfigMap(requestType, true)
+		recipe, err := getRecipesFromConfigMap(requestType, true, testConfig.ReconcilerNamespace)
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(recipe))
 
@@ -209,7 +218,7 @@ func testCreateConfigMap(t *testing.T) {
 		deleteConfigMap(configMapName, testNamespace)
 	}()
 
-	configMap, err := createConfigMap(alertData, incidentUuid)
+	configMap, err := createConfigMap(alertData, incidentUuid, testConfig.RecipeNamespace)
 	assert.Nil(t, err)
 
 	configMapName = configMap.Name
@@ -227,10 +236,6 @@ func testCreateJob(t *testing.T) {
 		deleteJob(jobName, testNamespace)
 	}()
 
-	testConfig := Config{
-		AggregatorAddress: "localhost:8080",
-		RedisAddress:      "localhost:6379",
-	}
 	job, err := createJob("test-1-recipe", recipe_1, incidentUuid, dataConfigMap.Name, &testConfig)
 	assert.NotNil(t, job)
 	assert.Nil(t, err)

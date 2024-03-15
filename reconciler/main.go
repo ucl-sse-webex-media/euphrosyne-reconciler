@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -71,10 +72,11 @@ func connectRedis(config *Config) {
 }
 
 func main() {
-	config := ParseConfig(os.Args[1:])
+	config, err := ParseConfig(os.Args[1:])
+	if err != nil {
+		panic(fmt.Sprintf("Failed to parse config: %s", err))
+	}
 	httpc = getHTTPClient()
-
-	var err error
 	initLogger()
 
 	connectRedis(&config)
@@ -87,6 +89,16 @@ func main() {
 	if err != nil {
 		logger.Error("Failed to initialise Kubernetes client", zap.Error(err))
 		return
+	}
+
+	if err := CheckNamespaceAccess(clientset, config.RecipeNamespace); err != nil {
+		panic(
+			fmt.Sprintf(
+				"The Reconciler doesn't have the necessary permissions in the specified recipe"+
+					" namespace '%s': %s",
+				config.RecipeNamespace, err,
+			),
+		)
 	}
 
 	go StartAlertHandler(&config)

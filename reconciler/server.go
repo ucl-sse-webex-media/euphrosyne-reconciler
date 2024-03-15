@@ -45,7 +45,7 @@ func handleStatusRequest(c *gin.Context, config *Config) {
 	logger.Info("Status Request received", zap.Any("request", data))
 
 	var jobStatuses []JobStatus
-	jobStatuses, err := getJobStatus(&data)
+	jobStatuses, err := getJobStatus(&data, config.RecipeNamespace)
 	if err != nil {
 		logger.Error("Error Getting Job Status", zap.Error(err))
 	}
@@ -58,14 +58,14 @@ func handleStatusRequest(c *gin.Context, config *Config) {
 }
 
 // Get the list of Job statuses for a specific UUID.
-func getJobStatus(message *map[string]interface{}) ([]JobStatus, error) {
+func getJobStatus(message *map[string]interface{}, namespace string) ([]JobStatus, error) {
 	listOptions := metav1.ListOptions{
 		LabelSelector: "app=euphrosyne",
 	}
 	if _, ok := (*message)["uuid"]; ok {
 		listOptions.LabelSelector += fmt.Sprintf(",uuid=%s", (*message)["uuid"])
 	}
-	jobList, err := clientset.BatchV1().Jobs(recipeNamespace).List(context.TODO(), listOptions)
+	jobList, err := clientset.BatchV1().Jobs(namespace).List(context.TODO(), listOptions)
 	if err != nil {
 		logger.Error("Failed to list K8s Jobs", zap.Error(err))
 		return nil, err

@@ -35,7 +35,9 @@ func testCollectRecipeResult(t *testing.T) {
 	wg.Add(2)
 
 	testConfig := Config{
-		RecipeTimeout: 2,
+		RecipeTimeout:       2,
+		RecipeNamespace:     testNamespace,
+		ReconcilerNamespace: testNamespace,
 	}
 	// simulate 2 recipes
 	testRecipeMap := map[string]Recipe{
@@ -94,7 +96,9 @@ func testCollectRecipeResult(t *testing.T) {
 // Test that created resources are cleaned up successfully.
 func testCleanup(t *testing.T) {
 	testConfig := Config{
-		RecipeTimeout: 2,
+		RecipeTimeout:       2,
+		RecipeNamespace:     testNamespace,
+		ReconcilerNamespace: testNamespace,
 	}
 
 	// a Job that is expected to run successfully

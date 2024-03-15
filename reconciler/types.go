@@ -1,10 +1,12 @@
 package main
 
 type Config struct {
-	AggregatorAddress string
-	RedisAddress      string
-	WebexBotAddress   string
-	RecipeTimeout     int
+	AggregatorAddress   string
+	RedisAddress        string
+	WebexBotAddress     string
+	RecipeTimeout       int
+	ReconcilerNamespace string
+	RecipeNamespace     string
 }
 
 type IncidentBotMessage struct {
