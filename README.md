@@ -160,9 +160,15 @@ specifying the `<recipe-namespace>`:
 ```
 
 Finally, you'll have to apply the Deployment again (or all of the manifests if you haven't done so
-already), replacing `<recipe-namespace>` and `<reconciler-namespace>` with the actual namespaces:
+already), as well as the Secret, replacing `<recipe-namespace>` and `<reconciler-namespace>` with
+the actual namespaces:
 
 ```bash
 kubectl apply -f reconciler/manifests -R -n <reconciler-namespace>
 kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml -n <reconciler-namespace>
+kubectl create secret generic euphrosyne-keys \
+  --from-literal=jira-url=<your Jira server URL> \
+  --from-literal=jira-user=<your Jira username> \
+  --from-literal=jira-token=<your Jira token> \
+  -n <recipe-namespace>
 ```
