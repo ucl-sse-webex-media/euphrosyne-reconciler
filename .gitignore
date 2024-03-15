@@ -186,4 +186,5 @@ cython_debug/
 .idea/
 .vscode/
 
+# Application-specific files
 /recipes/app

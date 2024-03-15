@@ -26,15 +26,6 @@ func handleWebhook(c *gin.Context, config *Config) {
 		return
 	}
 
-	if status, ok := alertData["status"].(string); ok {
-		if status != "firing"{
-			return
-		}
-	} else {
-		logger.Error("No status field in alert data")
-		return 
-	}
-	
 	// Log the alert data
 	alertData["uuid"] = uuid.New().String()
 	logger.Info("Alert received", zap.Any("alert", alertData))

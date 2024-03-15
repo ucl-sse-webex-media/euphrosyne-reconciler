@@ -252,7 +252,7 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_bucket_from_grafana(self, grafana_result):
         """
-        Get influxdb bucket from grafana_result.
+        Get influxDB bucket from grafana_result.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
@@ -314,7 +314,7 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_tags_from_grafana(self, grafana_result):
         """
-        Get influxdb tags from grafana_result.
+        Get influxDB tags from grafana_result.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
@@ -363,7 +363,7 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """
-        Get influxdb records.
+        Get influxDB records.
 
         Parameters:
         incident (Incident): The incident object.
@@ -380,7 +380,7 @@ class DataAggregator(HTTPService):
         }
 
         Returns:
-        dict: The response of influxdb query API.
+        dict: The response of influxDB query API.
         """
         url = self.get_source_url("influxdb")
         body = {"uuid": incident.uuid, "params": influxdb_query}
@@ -388,7 +388,7 @@ class DataAggregator(HTTPService):
 
     def get_opensearch_dashboard_link_from_grafana(self, grafana_result):
         """
-        Get opensearch dashboard link.
+        Get OpenSearch dashboard link.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
@@ -405,10 +405,10 @@ class DataAggregator(HTTPService):
 
     def get_opensearch_index_pattern(self, opensearch_dashboard_link):
         """
-        Get index pattern from opensearch link.
+        Get index pattern from OpenSearch link.
 
         Parameters:
-        opensearch_dashboard_link (str): The opensearch link.
+        opensearch_dashboard_link (str): The OpenSearch link.
 
         Returns:
         str: The index pattern.
@@ -421,13 +421,13 @@ class DataAggregator(HTTPService):
 
     def get_opensearch_records(self, incident: Incident, opensearch_query):
         """
-        Get opensearch records.
+        Get OpenSearch records.
 
         Parameters:
         incident (Incident): The incident object.,
 
         Returns:
-        dict: The response of opensearch query API.
+        dict: The response of OpenSearch query API.
         """
         url = self.get_source_url("opensearch")
         body = {"uuid": incident.uuid, "params": opensearch_query}
@@ -435,13 +435,13 @@ class DataAggregator(HTTPService):
 
     def get_total_opensearch_records_num(self, opensearch_records):
         """
-        Get total num of openseach_records.
+        Get total numBER of opensearch_records.
 
         Parameters:
         opensearch_records (dict): The response of opensearch query API.
 
         Returns:
-        int: The total num of openseach_records.
+        int: The total num of opensearch_records.
         """
         num = 0
         for _, record_list in opensearch_records.items():
@@ -452,7 +452,7 @@ class DataAggregator(HTTPService):
         self, opensearch_dashboard_link, filter_key, filter_data_list, start_time="", end_time=""
     ):
         """
-        Generate opensearch filter link that the value of filter_key is one of filter_data_list.
+        Generate opensearch filter link.
 
         Parameters:
         opensearch_dashboard_link (str): The opensearch dashboard link.
@@ -490,12 +490,11 @@ class DataAggregator(HTTPService):
         params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
         should_str = ",".join(formatted_items)
-        query_string = "(filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index:'{index_pattern}',key:{filter_key},negate:!f,params:!({params}),type:phrases,value:'{value}'),query:(bool:(minimum_should_match:1,should:!({should_str}))))),query:(language:kuery,query:''))".format(
-            index_pattern=index_pattern,
-            filter_key=filter_key,
-            params=params,
-            value=value,
-            should_str=should_str,
+        query_string = (
+            "(filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,"
+            f"index:'{index_pattern}',key:{filter_key},negate:!f,params:!({params}),"
+            f"type:phrases,value:'{value}'),query:(bool:(minimum_should_match:1,"
+            f"should:!({should_str}))))),query:(language:kuery,query:''))"
         )
         filter_link = re.sub(r"(&_q).*", f"&_q={query_string}", opensearch_dashboard_link)
         return filter_link

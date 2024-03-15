@@ -20,14 +20,14 @@ def precise_timestamp_to_second(timestamp_str):
 
 
 def get_influxdb_start_and_end_time(influxdb_records):
-    """get the start and end time of accurate influxdb records"""
+    """Get the start and end time of accurate InfluxDB records."""
     start_time = influxdb_records[0]["_time"]
     end_time = influxdb_records[-1]["_time"]
     return precise_timestamp_to_second(start_time), precise_timestamp_to_second(end_time)
 
 
 def count_metric_by_key(record_list, metric, count_key):
-    """count the number of metric by a key in list"""
+    """Count the number of metric by a key in list."""
     count = {}
     for item in record_list:
         if item[metric] in count:
@@ -37,20 +37,20 @@ def count_metric_by_key(record_list, metric, count_key):
     return count
 
 
-def analysis_max_region(influxdb_records):
-    """find the largest percentage of region(environment)"""
+def analyse_max_region(influxdb_records):
+    """Find the largest percentage of region (environment)."""
     region_count = count_metric_by_key(influxdb_records, "environment", count_key)
     max_region_name = max(region_count, key=region_count.get)
     max_region_count = region_count[max_region_name]
     return max_region_name, max_region_count
 
 
-def analysis_max_url(influxdb_records):
-    """analysis max percent url and method, and find the confluence uri count"""
+def analyse_max_url(influxdb_records):
+    """Analyse max percent url and method, and find the Confluence uri count."""
     uri_count = {}
     confluence_uri_count = 0
     # {uri:{method:count}}
-    # find is there any confluence uri with method post
+    # find is there any Confluence uri with method post
     for item in influxdb_records:
         uri = item["uri"]
         method = item["method"]
@@ -64,7 +64,7 @@ def analysis_max_url(influxdb_records):
             uri_count[uri][method] = 0
         uri_count[uri][method] += count
 
-    # find the lagest percent of uri
+    # find the largest percent of uri
     max_uri_count = 0
     max_uri = ""
     max_method = ""
@@ -78,8 +78,8 @@ def analysis_max_url(influxdb_records):
     return max_uri, max_method, max_uri_count, confluence_uri_count
 
 
-def analysis_max_user_id(opensearch_records):
-    """analysis max percent user id in opensearch records"""
+def analyse_max_user_id(opensearch_records):
+    """Analyse max percent user id in OpenSearch records."""
     user_id_list = []
     for _, record_list in opensearch_records.items():
         for record in record_list:
@@ -92,8 +92,8 @@ def analysis_max_user_id(opensearch_records):
     return max_userid, max_userid_count, user_id_count
 
 
-def analysis_confluence_log(opensearch_records):
-    """analysis confluence log"""
+def analyse_confluence_log(opensearch_records):
+    """Analyse Confluence log."""
     confluence_log_list = []
     for _, record_list in opensearch_records.items():
         for record in record_list:
@@ -133,8 +133,8 @@ def analysis_confluence_log(opensearch_records):
     return sorted_agent_full_name_count, sorted_agent_org_group_count, len(agent_full_name_list)
 
 
-def analysis_trend(influxdb_records, max_region):
-    """analysis the trend of the error in the max region"""
+def analyse_trend(influxdb_records, max_region):
+    """Analyse error trend in the max region."""
     # Filter records for the specified max_region
     max_region_records = [
         record for record in influxdb_records if record["environment"] == max_region
@@ -142,7 +142,7 @@ def analysis_trend(influxdb_records, max_region):
 
     # Ensure there are records to analyse after filtering
     if not max_region_records:
-        return "No records to analyze for the specified region."
+        return "No records to analyse for the specified region."
 
     first_time, _ = get_influxdb_start_and_end_time(max_region_records)
 
@@ -205,14 +205,14 @@ def handler(incident: Incident, recipe: Recipe):
 
     results, aggregator = recipe.results, recipe.aggregator
 
-    # query for grafana
+    # query for Grafana
     try:
         grafana_result = aggregator.get_grafana_info_from_incident(incident)
     except (DataAggregatorHTTPError, ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
-    # query for influxdb
+    # query for InfluxDB
     firing_time = aggregator.get_firing_time(incident)
     start_time = aggregator.calculate_query_start_time(grafana_result, firing_time)
 
@@ -237,18 +237,18 @@ def handler(incident: Incident, recipe: Recipe):
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
-    # get the start and end time of influxdb records
+    # get the start and end time of InfluxDB records
     first_error_time, last_error_time = get_influxdb_start_and_end_time(influxdb_records)
 
     # _field for error type
     error_num = sum(item[count_key] for item in influxdb_records)
 
-    # count how many different error code like 500,501
+    # count how many different error codes, e.g. 500, 501
     error_code_count = count_metric_by_key(influxdb_records, "httpStatusCode", count_key)
 
-    max_region_name, max_region_count = analysis_max_region(influxdb_records)
+    max_region_name, max_region_count = analyse_max_region(influxdb_records)
 
-    max_uri, max_method, max_uri_count, confluence_uri_count = analysis_max_url(influxdb_records)
+    max_uri, max_method, max_uri_count, confluence_uri_count = analyse_max_url(influxdb_records)
 
     (
         trend,
@@ -257,9 +257,9 @@ def handler(incident: Incident, recipe: Recipe):
         time_to_peak_seconds,
         num_data_points,
         max_region_first_time,
-    ) = analysis_trend(influxdb_records, max_region_name)
+    ) = analyse_trend(influxdb_records, max_region_name)
 
-    # query for opensearch
+    # query for OpenSearch
     influxdb_trackingid_name = "WEBEX_TRACKINGID"
     webex_tracking_id_list = list(
         {record[influxdb_trackingid_name] for record in influxdb_records}
@@ -279,7 +279,7 @@ def handler(incident: Incident, recipe: Recipe):
 
     opensearch_records_len = aggregator.get_total_opensearch_records_num(opensearch_records)
 
-    max_userid, max_userid_count, user_id_count = analysis_max_user_id(opensearch_records)
+    max_userid, max_userid_count, user_id_count = analyse_max_user_id(opensearch_records)
 
     user_id_tracking_id_list = []
     for _, record_list in opensearch_records.items():
@@ -297,10 +297,10 @@ def handler(incident: Incident, recipe: Recipe):
         sorted_agent_full_name_count,
         sorted_agent_org_group_count,
         confluence_log_total_count,
-    ) = analysis_confluence_log(opensearch_records)
+    ) = analyse_confluence_log(opensearch_records)
 
     # find the example error
-    # if the confluence uri is in errors, use error with the uri as the example
+    # if the Confluence uri is in errors, use error with the uri as the example
     if confluence_uri_count > 0:
         for item in influxdb_records:
             if (
@@ -341,42 +341,42 @@ def handler(incident: Incident, recipe: Recipe):
     if example_influxdb is not None:
         example_opensearch = opensearch_records[example_influxdb[influxdb_trackingid_name]][0]
 
-    # get the filter link for id
-
-    # example_opensearch_id = example_opensearch["_id"]
-    # id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(opensearch_link,"_id",[example_opensearch_id])
-
     results.log(f"From {first_error_time} To {last_error_time}, there are:")
-
     for error_code, count in error_code_count.items():
-        results.log(f"{count} pieces of http {error_code} errors")
+        results.log(f"* {count} HTTP {error_code} errors")
 
     if len(error_code_count) > 1:
         results.log(f"Total of {sum(error_code_count.values())} errors")
-    results.log("")
+
     results.log(
-        f"Largest percent of region is '{max_region_name}', occur in {max_region_count} ({(round(max_region_count/(error_num)*100,1))}%) of errors"
+        f"Largest percent of region is '{max_region_name}', occur in {max_region_count}"
+        f" ({round(max_region_count / (error_num) * 100, 1)}%) of errors"
     )
 
     if num_data_points > 1:
-        results.log(f"Trend for error occured in the region: {trend}")
+        results.log(f"Trend for error occurred in the region: {trend}")
 
     if peak_index == 0:
         results.log(
-            f"Peak value for errors in the region: {peak_value}, occured in the first influxdb point at {max_region_first_time}\n"
+            f"Peak value for errors in the region: {peak_value}, occurred in the first InfluxDB"
+            f" point at {max_region_first_time}"
         )
     else:
         results.log(
-            f"Peak value for errors in the region: {peak_value}, occured {time_to_peak_seconds} seconds after the first influxdb point at {max_region_first_time}\n"
+            f"Peak value for errors in the region: {peak_value}, occurred {time_to_peak_seconds}"
+            f" seconds after the first InfluxDB point at {max_region_first_time}"
         )
 
     results.log(
-        f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in {max_uri_count} ({round(max_uri_count/(error_num)*100,1)}%) of errors"
+        f"Largest percent of uri is '{max_uri}' with method '{max_method}', occur in"
+        f" {max_uri_count} ({round(max_uri_count/(error_num)*100,1)}%) of errors"
     )
 
     if max_uri != "calliope/api/v2/venues/{venueId}/confluences" and confluence_uri_count > 0:
         results.log(
-            f"IMPORTANT! {confluence_uri_count}({round(confluence_uri_count/(error_num)*100),1} %) errors occur in uri 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST'\n"
+            f"IMPORTANT! {confluence_uri_count}("
+            f"{round(confluence_uri_count / (error_num) * 100), 1} %) of errors occur for uri"
+            f" 'calliope/api/v2/venues/{{venueId}}/confluences' with method 'POST'"
         )
 
     if len(sorted_agent_full_name_count) > 0:
@@ -392,24 +392,26 @@ def handler(incident: Incident, recipe: Recipe):
                 main_percentage_total += full_name_percentage
                 results.log(f"{agent_full_name}: ({full_name_percentage}%)")
         if main_percentage_total != 100:
-            results.log(f"other: ({round(100 - main_percentage_total,1)}%)")
+            results.log(f"other: ({round(100 - main_percentage_total, 1)}%)")
 
         org_group_name, org_group_count = sorted_agent_org_group_count[0]
         org_group_percentage = round(org_group_count / confluence_log_total_count * 100, 1)
         results.log(
-            f"Largest percent agent org and group is '{org_group_name}' ({org_group_percentage}%)\n"
+            f"Largest percent agent org and group is '{org_group_name}' ({org_group_percentage}%)"
         )
 
-    results.log(f"{len(user_id_count)} unique USER ID in opensearch logs")
+    results.log(f"{len(user_id_count)} unique USER ID in OpenSearch logs")
     results.log(
-        f"Largest percent of USER ID is [{max_userid}]({user_id_filter_link}), occur in {max_userid_count} ({round(max_userid_count/opensearch_records_len*100,1)}%) of opensearch logs\n"
+        f"Largest percent of USER ID is [{max_userid}]({user_id_filter_link}), occur in"
+        f" {max_userid_count} ({round(max_userid_count/opensearch_records_len*100,1)}%) of"
+        " OpenSearch logs"
     )
 
     results.log("Example Error Info: ")
     example_openseach_field = example_opensearch["fields"]
-    results.log(
-        f"region:{example_opensearch['environment']}\noperation: {example_openseach_field['operation_key']}\nUSER_ID:{example_openseach_field['USER_ID']}"
-    )
+    results.log(f"region:{example_opensearch['environment']}")
+    results.log(f"operation: {example_openseach_field['operation_key']}")
+    results.log(f"USER_ID:{example_openseach_field['USER_ID']}")
 
     if "stack_trace" in example_openseach_field:
         stack_trace = example_openseach_field["stack_trace"].split("\n")
