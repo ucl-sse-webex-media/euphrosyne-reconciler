@@ -137,7 +137,7 @@ class Jira(HTTPService):
 class DataAggregator(HTTPService):
     """Interface for the Thalia Data Aggregator."""
 
-    URL = "http://localhost:9527"
+    URL = "http://localhost:8080"
     SOURCES = {"grafana", "prometheus", "influxdb", "opensearch"}
 
     def __init__(self, aggregator_address):
@@ -160,6 +160,7 @@ class DataAggregator(HTTPService):
         return res["data"]
 
     def _check_api_res_error(self, res):
+        """Check if the API response contains an error and raise an exception if it does."""
         if res.get("error") is not None:
             raise ApiResError(res.get("error"))
 
@@ -175,8 +176,8 @@ class DataAggregator(HTTPService):
         """Get alert rule from a URL."""
         return url.split("/")[-2]
 
-    def _get_grafana_info(self, data: dict):
-        """Get the Grafana dashboard, specific panel and alert rule from the input data."""
+    def _get_grafana_id_data(self, data: dict):
+        """Get the Grafana dashboard, alert panel and alert rule id from the alert."""
         alert = data.get("alert")
         dashboard_id = self._get_grafana_dashboard_from_url(alert["dashboardURL"])
         panel_id = self._get_grafana_panel_from_url(alert["panelURL"])
@@ -185,8 +186,16 @@ class DataAggregator(HTTPService):
         return dashboard_id, panel_id, alert_rule_id
 
     def get_grafana_info_from_incident(self, incident: Incident, prefetch=False):
-        """Get a Grafana dashboard."""
-        dashboard_id, panel_id, alert_rule_id = self._get_grafana_info(incident.data)
+        """
+        Get all detailed Grafana info including alert rule, data source info, dashboard, panel etc.
+
+        Parameters:
+        incident (Incident): The incident object.
+
+        Returns:
+        dict: The response of garfana query API.
+        """
+        dashboard_id, panel_id, alert_rule_id = self._get_grafana_id_data(incident.data)
         url = self.get_source_url("grafana")
         body = {
             "uuid": incident.uuid,
@@ -200,13 +209,29 @@ class DataAggregator(HTTPService):
         return self.post(url, body=body)
 
     def get_firing_time(self, incident):
-        """Get alert firing time."""
+        """Get alert firing time.
+
+        Parameters:
+        incident (Incident): The incident object.
+
+        Returns:
+        str: The firing time of the alert.
+        """
         alert = incident.data.get("alert")
         # The startsAt in grafana alert only represents the firing time (stop time of query)
         return alert["startsAt"]
 
     def calculate_query_start_time(self, grafana_result, firing_time):
-        """Calculate query start time by alert rule."""
+        """
+        Calculate query start time by grafana_result.
+
+        Paramerter:
+        grafana_result (dict): response from "get_grafana_info_from_incident" method.
+        firing_time (str): The firing time of the alert.
+
+        Returns:
+        str: The start time of the query.
+        """
         alert_rule = grafana_result["alertRule"]
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
         # start time = firing time - pending time - querying duration - querying interval
@@ -225,13 +250,29 @@ class DataAggregator(HTTPService):
         )
         return fmt_start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def get_influxdb_bucket(self, grafana_result):
-        """Get influxdb bucket from alert rule."""
+    def get_influxdb_bucket_from_grafana(self, grafana_result):
+        """
+        Get influxdb bucket from grafana_result.
+
+        Parameters:
+        grafana_result (dict): response from "get_grafana_info_from_incident" method.
+
+        Returns:
+        str: The influxdb bucket name.
+        """
         dataSourceInfo = grafana_result["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
 
-    def get_influxdb_measurement(self, grafana_result):
-        """Get influxdb measurement from alert rule."""
+    def get_influxdb_measurement_from_grafana(self, grafana_result):
+        """
+        Get influxdb measurement from grafana_result.
+
+        Parameters:
+        grafana_result (dict): response from "get_grafana_info_from_incident" method.
+
+        Returns:
+        str: The influxdb measurement name.
+        """
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         # alert query configured in default editor mode
@@ -271,8 +312,21 @@ class DataAggregator(HTTPService):
 
         return key, value, operator
 
-    def get_influxdb_tags(self, grafana_result):
-        """Get influxdb tags from alert rule."""
+    def get_influxdb_tags_from_grafana(self, grafana_result):
+        """
+        Get influxdb tags from grafana_result.
+
+        Parameters:
+        grafana_result (dict): response from "get_grafana_info_from_incident" method.
+
+        Rertuns:
+        list of dict: The list of influxdb tags.
+        {
+            "key": str,
+            "value": str,
+            "operator": str
+        }
+        """
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
         if "tags" in model and len(model["tags"]) != 0:
@@ -308,13 +362,40 @@ class DataAggregator(HTTPService):
         return result
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
-        """Get influxdb records."""
+        """
+        Get influxdb records.
+
+        Parameters:
+        incident (Incident): The incident object.
+        influxdb_query (dict): The influxdb query.
+        {
+            "bucket": str,
+            "measurement": str,
+            "tagSets": list of dict
+            [{
+                tagkeyName:tagvalue
+            }],
+            "start_time": str,
+            "end_time": str
+        }
+
+        Returns:
+        dict: The response of influxdb query API.
+        """
         url = self.get_source_url("influxdb")
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
 
-    def get_opensearch_link(self, grafana_result):
-        """Get opensearch link."""
+    def get_opensearch_dashboard_link_from_grafana(self, grafana_result):
+        """
+        Get opensearch dashboard link.
+
+        Parameters:
+        grafana_result (dict): response from "get_grafana_info_from_incident" method.
+
+        Returns:
+        str: The opensearch dashboard link.
+        """
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
         for url in urls:
@@ -322,36 +403,76 @@ class DataAggregator(HTTPService):
                 return url
         return ""
 
-    def get_opensearch_index_pattern(self, opensearch_link):
-        """Get index pattern from grafana."""
+    def get_opensearch_index_pattern(self, opensearch_dashboard_link):
+        """
+        Get index pattern from opensearch link.
+
+        Parameters:
+        opensearch_dashboard_link (str): The opensearch link.
+
+        Returns:
+        str: The index pattern.
+        """
         startStr = "indexPattern:'"
-        start_index = opensearch_link.find(startStr) + len(startStr)
-        end_index = opensearch_link.find("'", start_index)
-        index_pattern_url = opensearch_link[start_index:end_index]
+        start_index = opensearch_dashboard_link.find(startStr) + len(startStr)
+        end_index = opensearch_dashboard_link.find("'", start_index)
+        index_pattern_url = opensearch_dashboard_link[start_index:end_index]
         return index_pattern_url
 
     def get_opensearch_records(self, incident: Incident, opensearch_query):
-        """Get opensearch records."""
+        """
+        Get opensearch records.
+
+        Parameters:
+        incident (Incident): The incident object.,
+
+        Returns:
+        dict: The response of opensearch query API.
+        """
         url = self.get_source_url("opensearch")
         body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)
 
     def get_total_opensearch_records_num(self, opensearch_records):
-        """Get total num of openseach_records."""
+        """
+        Get total num of openseach_records.
+
+        Parameters:
+        opensearch_records (dict): The response of opensearch query API.
+
+        Returns:
+        int: The total num of openseach_records.
+        """
         num = 0
         for _, record_list in opensearch_records.items():
             num += len(record_list)
         return num
 
     def generate_opensearch_filter_link_is_one_of(
-        self, opensearch_link, filter_key, filter_data_list, start_time="", end_time=""
+        self, opensearch_dashboard_link, filter_key, filter_data_list, start_time="", end_time=""
     ):
-        """Generate opensearch filter link that the value of filter_key is one of filter_data_list."""
+        """
+        Generate opensearch filter link that the value of filter_key is one of filter_data_list.
+
+        Parameters:
+        opensearch_dashboard_link (str): The opensearch dashboard link.
+        filter_key (str): The filter key name like "webextrackingID".
+        filter_data_list (list): The filter data list.
+        start_time (str): The start time of the query.
+        end_time (str): The end time of the query.
+
+        Returns:
+        str: The opensearch filter link.
+        """
         if start_time != "":
-            opensearch_link = re.sub(r"from:[^,)]+", f"from:'{start_time}'", opensearch_link)
+            opensearch_dashboard_link = re.sub(
+                r"from:[^,)]+", f"from:'{start_time}'", opensearch_dashboard_link
+            )
         if end_time != "":
-            opensearch_link = re.sub(r"to:[^,)]+", f"to:{end_time}", opensearch_link)
-        index_pattern = self.get_opensearch_index_pattern(opensearch_link)
+            opensearch_dashboard_link = re.sub(
+                r"to:[^,)]+", f"to:{end_time}", opensearch_dashboard_link
+            )
+        index_pattern = self.get_opensearch_index_pattern(opensearch_dashboard_link)
         template_index = "(match_phrase:({filter_key}:{filter_data}))"
         template_index_with_digit = "(match_phrase:({filter_key}:'{filter_data}'))"
         formatted_items = []
@@ -376,5 +497,18 @@ class DataAggregator(HTTPService):
             value=value,
             should_str=should_str,
         )
-        filter_link = re.sub(r"(&_q).*", f"&_q={query_string}", opensearch_link)
+        filter_link = re.sub(r"(&_q).*", f"&_q={query_string}", opensearch_dashboard_link)
         return filter_link
+
+    def shorten_opensearch_dashboard_link(self, url):
+        """
+        Shorten opensearch url.
+
+        Parameters:
+        url (str): The opensearch dashboard link after "_dashboards/" part.
+
+        Returns:
+        str : full shortern url.
+        """
+        url = self.get_source_url("opensearch") + "/shortern_url"
+        return self.post(url, body={url: url})

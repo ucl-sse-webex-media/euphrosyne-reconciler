@@ -216,7 +216,7 @@ def handler(incident: Incident, recipe: Recipe):
     firing_time = aggregator.get_firing_time(incident)
     start_time = aggregator.calculate_query_start_time(grafana_result, firing_time)
 
-    tags = aggregator.get_influxdb_tags(grafana_result)
+    tags = aggregator.get_influxdb_tags_from_grafana(grafana_result)
     tag_set = []
 
     for tag in tags:
@@ -225,8 +225,8 @@ def handler(incident: Incident, recipe: Recipe):
             key = key[: key.find("::tag")]
         tag_set.append({key: tag["value"]})
     influxdb_query = {
-        "bucket": aggregator.get_influxdb_bucket(grafana_result),
-        "measurement": aggregator.get_influxdb_measurement(grafana_result),
+        "bucket": aggregator.get_influxdb_bucket_from_grafana(grafana_result),
+        "measurement": aggregator.get_influxdb_measurement_from_grafana(grafana_result),
         "startTime": start_time,
         "stopTime": firing_time,
         "tagSets": tag_set,
@@ -264,7 +264,7 @@ def handler(incident: Incident, recipe: Recipe):
     webex_tracking_id_list = list(
         {record[influxdb_trackingid_name] for record in influxdb_records}
     )
-    opensearch_link = aggregator.get_opensearch_link(grafana_result)
+    opensearch_link = aggregator.get_opensearch_dashboard_link_from_grafana(grafana_result)
     index_pattern = aggregator.get_opensearch_index_pattern(opensearch_link)
     opensearch_query = {
         "field": {"WEBEX_TRACKINGID": webex_tracking_id_list},
@@ -421,7 +421,6 @@ def handler(incident: Incident, recipe: Recipe):
             results.log(f"logs: {stack_trace[0]}")
 
     logger.info("analysis:", results.analysis)
-
     results.status = RecipeStatus.SUCCESSFUL
 
 
