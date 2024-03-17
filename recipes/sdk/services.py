@@ -134,18 +134,6 @@ class Jira(HTTPService):
 
 
 class Space(HTTPService):
-    #TODO: raise error
-    '''
-    create room: /rooms
-    header: personal access token
-    create a room, authenticated user is automatically added as a member
-    parameters: title, description
-
-    create membership: /memberships
-    header: personal access token
-    add someone (personId or personEmail) to a room (roomId)
-    parameters: roomId, personId, personEmail
-    '''
     def __init__(self, url=None):
         self.url = "https://webexapis.com/v1"
         super().__init__(url or self.url)
@@ -171,18 +159,31 @@ class Space(HTTPService):
             'Authorization': 'Bearer ' + self.bot_token
         }
 
-    def create_room(self, data: dict):
-        """Create a Webex Teams Room."""
-        title = data.get("title")
-        if not title:
-            raise SpaceParsingError("Title is required.")
+    def post(self, url, params=None, body=None, auth=None, headers=None):
+        """Send a POST request, skip the raise for status"""
+        try:
+            response = self.session.post(
+                url,
+                params=params,
+                json=body,
+                headers=headers or self.get_headers(),
+                auth=auth,
+            )
+            return response
+        except requests.exceptions.RequestException as e:
+            logger.error(e)
+            raise e
+
+    def create_space(self, data: dict):
+        """Create a Webex Room."""
+        name = data.get("name")
+        if not name:
+            raise SpaceParsingError("Space Name is required.")
         try:
             # check if there is any exitsting room
-            room_id = None
-            # QUESTION: which token should be used, bot or admin?
             response = self.get(self.url + "/rooms", headers=self.get_headers())
             for room in response["items"]:
-                if room["title"] == title:
+                if room["title"] == name:
                     return room["id"]
         except requests.exceptions.RequestException as e:
             logger.error("Failed to get Webex Teams room: ", e)
@@ -191,19 +192,17 @@ class Space(HTTPService):
         description = data.get("description") or data.get("uuid")
         # create a new room
         room_fields = {
-            "title": title,
+            "title": name,
             "description": description
         }
         try:
-            response = self.post(self.url + "/rooms", body=room_fields, headers=self.get_headers())
+            response = self.post(self.url + "/rooms", body=room_fields, headers=self.get_headers()).json()
             return response["id"]
         except requests.exceptions.RequestException as e:
             logger.error("Failed to create Webex Teams room: ", e)
             raise SpaceHTTPError(e)
 
-
     def add_user(self, data: dict, roomId: str):
-        #TODO: error handling - user already in the room
         """Add a user to a Webex Teams Room."""
         personEmails = data.get("personEmails")
         if not personEmails:
@@ -214,15 +213,19 @@ class Space(HTTPService):
             "personEmail": self.bot_email
         }
         try:
+            # add bot to the space
             response = self.post(self.url + "/memberships", body=bot_fields, headers=self.get_headers())
+            if(response.status_code == 409):
+                logger.info("Bot is already in the room")
+            elif(response.status_code == 200):
+                logger.info("Bot added to the room")
+            else:
+                logger.error("Failed to add bot to Webex Teams room: ", response)
+                raise SpaceHTTPError(response)
         except requests.exceptions.RequestException as e:
             logger.error("Failed to add bot to Webex Teams room: ", e)
             raise SpaceHTTPError(e)
-        
 
-
-        #TODO: beautify the response
-        #QUESTION: bot could not be added to the room
         add_user_response = ""
         for personEmail in personEmails:
             membership_fields = {
@@ -230,9 +233,15 @@ class Space(HTTPService):
                 "personEmail": personEmail,
             }
             try:
-                logger.error(membership_fields)
                 response = self.post(self.url + "/memberships", body=membership_fields, headers=self.get_headers())
-                add_user_response += response["personEmail"] + " added to the room\n"
+                if(response.status_code == 409):
+                    logger.info(f"{personEmail} is already in the room")
+                elif(response.status_code == 200):
+                    logger.info(f"{personEmail} is added to the room")
+                    add_user_response += response.json()["personEmail"] + " added to the room\n"
+                else:
+                    logger.error(f"Failed to add {personEmail} to Webex Teams room: ", response)
+                    raise SpaceHTTPError(response)
             except requests.exceptions.RequestException as e:
                 logger.error("Failed to add user to Webex Teams room: ", e)
                 raise SpaceHTTPError(e)
@@ -246,7 +255,7 @@ class Space(HTTPService):
         }
         try:
             response = self.post(self.url + "/messages", body=body, headers=self.get_bot_headers())
-            return response["text"]
+            return response.json()["text"]
         except requests.exceptions.RequestException as e:
             logger.error("Failed to post analysis to Webex Teams room: ", e)
             raise SpaceHTTPError(e)
