@@ -435,10 +435,10 @@ class DataAggregator(HTTPService):
 
     def get_total_opensearch_records_num(self, opensearch_records):
         """
-        Get total numBER of opensearch_records.
+        Get total number of opensearch_records.
 
         Parameters:
-        opensearch_records (dict): The response of opensearch query API.
+        opensearch_records (dict): The response of OpenSearch query API.
 
         Returns:
         int: The total num of opensearch_records.
@@ -452,17 +452,17 @@ class DataAggregator(HTTPService):
         self, opensearch_dashboard_link, filter_key, filter_data_list, start_time="", end_time=""
     ):
         """
-        Generate opensearch filter link.
+        Generate OpenSearch filter link.
 
         Parameters:
-        opensearch_dashboard_link (str): The opensearch dashboard link.
+        opensearch_dashboard_link (str): The OpenSearch dashboard link.
         filter_key (str): The filter key name like "webextrackingID".
         filter_data_list (list): The filter data list.
         start_time (str): The start time of the query.
         end_time (str): The end time of the query.
 
         Returns:
-        str: The opensearch filter link.
+        str: The OpenSearch filter link.
         """
         if start_time != "":
             opensearch_dashboard_link = re.sub(
@@ -501,10 +501,10 @@ class DataAggregator(HTTPService):
 
     def shorten_opensearch_dashboard_link(self, url):
         """
-        Shorten opensearch url.
+        Shorten OpenSearch url.
 
         Parameters:
-        url (str): The opensearch dashboard link after "_dashboards/" part.
+        url (str): The OpenSearch dashboard link after "_dashboards/" part.
 
         Returns:
         str : full shortern url.
