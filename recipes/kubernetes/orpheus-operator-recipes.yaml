@@ -20,3 +20,8 @@ data:
       image: "phoevos/euphrosyne-recipes:latest"
       entrypoint: "jira"
       description: "Recipe for creating a JIRA issue."
+    space:
+      enabled: true
+      image: "wakawakaliulala/euphrosyne-recipes:latest"
+      entrypoint: "space"
+      description: "Recipe for creating a webex space"

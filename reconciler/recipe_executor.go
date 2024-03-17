@@ -222,6 +222,39 @@ func createJob(
 										},
 									},
 								},
+								{
+									Name: "WEBEX_TOKEN",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "webex-token",
+										},
+									},
+								},
+								{
+									Name: "BOT_TOKEN",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "bot-token",
+										},
+									},
+								},
+								{
+									Name: "BOT_EMAIL",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "euphrosyne-keys",
+											},
+											Key: "bot-email",
+										},
+									},
+								},
 							},
 						},
 					},
