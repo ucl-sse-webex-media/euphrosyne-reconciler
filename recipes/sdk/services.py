@@ -227,7 +227,7 @@ class DataAggregator(HTTPService):
 
         Start time = firing time - pending time - querying duration - querying interval
 
-        Paramerter:
+        Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
         firing_time (str): The firing time of the alert.
 
@@ -348,7 +348,7 @@ class DataAggregator(HTTPService):
         # extract content after "where"
         where_index = query.find("WHERE")
         query = query[where_index + 6 :]
-        # reove the possible query str after "where" content
+        # remove the possible query str after "where" content
         if "$timeFilter" in query:
             index = query.find("$timeFilter")
             query = query[:index]
