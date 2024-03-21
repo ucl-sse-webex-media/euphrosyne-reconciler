@@ -225,6 +225,8 @@ class DataAggregator(HTTPService):
         """
         Calculate query start time by grafana_result.
 
+        Start time = firing time - pending time - querying duration - querying interval
+
         Paramerter:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
         firing_time (str): The firing time of the alert.
@@ -234,7 +236,6 @@ class DataAggregator(HTTPService):
         """
         alert_rule = grafana_result["alertRule"]
         fmt_firing_time = datetime.strptime(firing_time, "%Y-%m-%dT%H:%M:%SZ")
-        # start time = firing time - pending time - querying duration - querying interval
         alert_query = alert_rule["data"][0]
         query_time_range = (
             alert_query["relativeTimeRange"]["from"] - alert_query["relativeTimeRange"]["to"]
@@ -252,26 +253,26 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_bucket_from_grafana(self, grafana_result):
         """
-        Get influxDB bucket from grafana_result.
+        Get InfluxDB bucket from grafana_result.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
 
         Returns:
-        str: The influxdb bucket name.
+        str: The InfluxDB bucket name.
         """
         dataSourceInfo = grafana_result["dataSourceInfo"]
         return dataSourceInfo["jsonData"]["dbName"]
 
     def get_influxdb_measurement_from_grafana(self, grafana_result):
         """
-        Get influxdb measurement from grafana_result.
+        Get InfluxDB measurement from grafana_result.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
 
         Returns:
-        str: The influxdb measurement name.
+        str: The InfluxDB measurement name.
         """
         alert_rule = grafana_result["alertRule"]
         model = alert_rule["data"][0]["model"]
@@ -289,23 +290,31 @@ class DataAggregator(HTTPService):
         return result
 
     def _parse_tags(self, tag_str):
-        """Parse tags and values by operator."""
+        """
+        Parse tags and values by operator.
+
+        String before operator is the tag name
+
+        String After operator is the tag value
+        """
         pattern = r"!=|<>|=~|!~|>=|<=|[><=]"
         match = re.search(pattern, tag_str)
         if match:
             start_pos = match.start()
             key = tag_str[:start_pos].strip().replace('"', "").replace("'", "")
+            # bracket right after "where"
             if key[0] == "(":
                 key = key[1:]
             key = key.strip()
             end_pos = match.end()
             value = tag_str[end_pos:].strip()
+            # last bracket that wrap the "where" content
             if value[-1] == ")":
                 value = value[:-1].strip()
             # value is string,remove qutation mark
             if value[0] == "'" or value[0] == '"':
                 value = value[1:-1]
-            # value is int or boolean
+            # value is int or boolean,remove extra space
             else:
                 value = value.strip()
             operator = tag_str[start_pos:end_pos]
@@ -314,13 +323,13 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_tags_from_grafana(self, grafana_result):
         """
-        Get influxDB tags from grafana_result.
+        Get InfluxDB tags from grafana_result.
 
         Parameters:
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
 
         Rertuns:
-        list of dict: The list of influxdb tags.
+        list of dict: The list of InfluxDB tags.
         {
             "key": str,
             "value": str,
@@ -336,9 +345,10 @@ class DataAggregator(HTTPService):
         if "WHERE" not in query:
             return result
         # alert query configured in query mode
+        # extract content after "where"
         where_index = query.find("WHERE")
         query = query[where_index + 6 :]
-        # the possible query str after where part
+        # reove the possible query str after "where" content
         if "$timeFilter" in query:
             index = query.find("$timeFilter")
             query = query[:index]
@@ -346,6 +356,7 @@ class DataAggregator(HTTPService):
             index = query.upper().find("GROUP BY")
             query = query[:index]
         query = query.replace("and ", "AND ").replace("or ", "OR ")
+        # split by "AND", each split item contains tag name, operator and value
         parts = query.split("AND ")
         for part in parts:
             if part.strip() == "":
@@ -363,11 +374,11 @@ class DataAggregator(HTTPService):
 
     def get_influxdb_records(self, incident: Incident, influxdb_query):
         """
-        Get influxDB records.
+        Get InfluxDB records.
 
         Parameters:
         incident (Incident): The incident object.
-        influxdb_query (dict): The influxdb query.
+        influxdb_query (dict): The InfluxDB query.
         {
             "bucket": str,
             "measurement": str,
@@ -380,7 +391,7 @@ class DataAggregator(HTTPService):
         }
 
         Returns:
-        dict: The response of influxDB query API.
+        dict: The response of InfluxDB query API.
         """
         url = self.get_source_url("influxdb")
         body = {"uuid": incident.uuid, "params": influxdb_query}
@@ -394,7 +405,7 @@ class DataAggregator(HTTPService):
         grafana_result (dict): response from "get_grafana_info_from_incident" method.
 
         Returns:
-        str: The opensearch dashboard link.
+        str: The OpenSearch dashboard link.
         """
         links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
         urls = [item["url"] for item in links]
@@ -435,13 +446,13 @@ class DataAggregator(HTTPService):
 
     def get_total_opensearch_records_num(self, opensearch_records):
         """
-        Get total number of opensearch_records.
+        Get total number of OpenSearch records.
 
         Parameters:
         opensearch_records (dict): The response of OpenSearch query API.
 
         Returns:
-        int: The total num of opensearch_records.
+        int: The total number of OpenSearch records.
         """
         num = 0
         for _, record_list in opensearch_records.items():
@@ -452,7 +463,11 @@ class DataAggregator(HTTPService):
         self, opensearch_dashboard_link, filter_key, filter_data_list, start_time="", end_time=""
     ):
         """
-        Generate OpenSearch filter link.
+        Generate OpenSearch dashboard filter link
+
+        Filter OpenSearch records that the values of filter_key is one of the values in filter_data_list.
+
+        For item in filter_data_list, if it starts with an digit, it should be wrapped with single quote in the 'params' and 'should' varibales.
 
         Parameters:
         opensearch_dashboard_link (str): The OpenSearch dashboard link.
@@ -489,12 +504,12 @@ class DataAggregator(HTTPService):
                 )
         params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
-        should_str = ",".join(formatted_items)
+        should = ",".join(formatted_items)
         query_string = (
             "(filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,"
             f"index:'{index_pattern}',key:{filter_key},negate:!f,params:!({params}),"
             f"type:phrases,value:'{value}'),query:(bool:(minimum_should_match:1,"
-            f"should:!({should_str}))))),query:(language:kuery,query:''))"
+            f"should:!({should}))))),query:(language:kuery,query:''))"
         )
         filter_link = re.sub(r"(&_q).*", f"&_q={query_string}", opensearch_dashboard_link)
         return filter_link
