@@ -12,6 +12,7 @@ from sdk.recipe import Recipe, RecipeStatus
 
 logger = logging.getLogger(__name__)
 
+# the key name in InfluxDB that is used to count the number of errors
 count_key = "_value"
 
 
@@ -81,9 +82,8 @@ def analyse_max_url(influxdb_records):
 def analyse_max_user_id(opensearch_records):
     """Analyse max percent user id in OpenSearch records."""
     user_id_list = []
-    for _, record_list in opensearch_records.items():
-        for record in record_list:
-            user_id_list.append(record["fields"].get("USER_ID", ""))
+    for record in opensearch_records:
+        user_id_list.append(record["fields"].get("USER_ID", ""))
 
     # find the largest percent of user_id
     user_id_count = Counter(user_id_list)
@@ -95,15 +95,14 @@ def analyse_max_user_id(opensearch_records):
 def analyse_confluence_log(opensearch_records):
     """Analyse Confluence log."""
     confluence_log_list = []
-    for _, record_list in opensearch_records.items():
-        for record in record_list:
-            operation_key = record["fields"]["operation_key"]
-            method = operation_key.split(" ")[0]
-            uri = operation_key.split(" ")[1]
-            if method == "POST" and re.search(r"/calliope/api/v2/venues/.+?/confluences", uri):
-                message = record.get("message", "")
-                if "Confluence Create Broker Summary" in message:
-                    confluence_log_list.append(message)
+    for record in opensearch_records:
+        operation_key = record["fields"]["operation_key"]
+        method = operation_key.split(" ")[0]
+        uri = operation_key.split(" ")[1]
+        if method == "POST" and re.search(r"/calliope/api/v2/venues/.+?/confluences", uri):
+            message = record.get("message", "")
+            if "Confluence Create Broker Summary" in message:
+                confluence_log_list.append(message)
 
     agent_full_name_list = []
     agent_org_group_list = []
@@ -199,6 +198,13 @@ def analyse_trend(influxdb_records, max_region):
     )
 
 
+def get_total_opensearch_records_num(opensearch_records):
+    """
+    Get the total number of OpenSearch records.
+    """
+    return len(opensearch_records)
+
+
 def handler(incident: Incident, recipe: Recipe):
     """HTTP Errors Recipe."""
     logger.info("Received input:", incident)
@@ -207,14 +213,15 @@ def handler(incident: Incident, recipe: Recipe):
 
     # query for Grafana
     try:
-        grafana_result = aggregator.get_grafana_info_from_incident(incident)
+        grafana_result = aggregator.get_grafana_info_from_incident(incident, force_latest=True)
     except (DataAggregatorHTTPError, ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
+
     # query for InfluxDB
-    firing_time = aggregator.get_firing_time(incident)
-    start_time = aggregator.calculate_query_start_time(grafana_result, firing_time)
+    firing_time = aggregator.get_firing_time_from_incident(incident)
+    query_start_time = aggregator.calculate_query_start_time(grafana_result, firing_time)
 
     tags = aggregator.get_influxdb_tags_from_grafana(grafana_result)
     tag_set = []
@@ -227,12 +234,14 @@ def handler(incident: Incident, recipe: Recipe):
     influxdb_query = {
         "bucket": aggregator.get_influxdb_bucket_from_grafana(grafana_result),
         "measurement": aggregator.get_influxdb_measurement_from_grafana(grafana_result),
-        "startTime": start_time,
+        "startTime": query_start_time,
         "stopTime": firing_time,
         "tagSets": tag_set,
     }
     try:
-        influxdb_records = aggregator.get_influxdb_records(incident, influxdb_query)
+        influxdb_records = aggregator.get_influxdb_records(
+            incident, influxdb_query, force_latest=True
+        )
     except (DataAggregatorHTTPError, ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
@@ -240,14 +249,15 @@ def handler(incident: Incident, recipe: Recipe):
     # get the start and end time of InfluxDB records
     first_error_time, last_error_time = get_influxdb_start_and_end_time(influxdb_records)
 
-    # _field for error type
     error_num = sum(item[count_key] for item in influxdb_records)
 
     # count how many different error codes, e.g. 500, 501
     error_code_count = count_metric_by_key(influxdb_records, "httpStatusCode", count_key)
 
+    # analyse max region
     max_region_name, max_region_count = analyse_max_region(influxdb_records)
 
+    # analyse max url
     max_uri, max_method, max_uri_count, confluence_uri_count = analyse_max_url(influxdb_records)
 
     (
@@ -260,37 +270,51 @@ def handler(incident: Incident, recipe: Recipe):
     ) = analyse_trend(influxdb_records, max_region_name)
 
     # query for OpenSearch
-    influxdb_trackingid_name = "WEBEX_TRACKINGID"
+    grafana_opensearch_config_list = aggregator.get_grafana_opensearch_config_list(grafana_result)
+
+    # only one datalink is set in grafana for now
+    grafana_opensearch_config = grafana_opensearch_config_list[0]
+    # the key name in influxDB used to link with OpenSearch
+    influxdb_tracking_key_name = grafana_opensearch_config["dataSourceField"]
     webex_tracking_id_list = list(
-        {record[influxdb_trackingid_name] for record in influxdb_records}
+        {record[influxdb_tracking_key_name] for record in influxdb_records}
     )
-    opensearch_link = aggregator.get_opensearch_dashboard_link_from_grafana(grafana_result)
-    index_pattern = aggregator.get_opensearch_index_pattern(opensearch_link)
+    opensearch_link = grafana_opensearch_config["url"]
+    index_pattern = grafana_opensearch_config["indexPattern"]
+
+    # the OpenSearch filter key name correponding to key name in influxDB
+    opensearch_filter_key_name = grafana_opensearch_config["osFilterKey"]
     opensearch_query = {
-        "field": {"WEBEX_TRACKINGID": webex_tracking_id_list},
+        "field": {opensearch_filter_key_name: webex_tracking_id_list},
         "index_pattern": index_pattern,
     }
     try:
-        opensearch_records = aggregator.get_opensearch_records(incident, opensearch_query)
+        opensearch_records = aggregator.get_opensearch_records(
+            incident, opensearch_query, force_latest=True
+        )
     except (DataAggregatorHTTPError, ApiResError) as e:
         results.log(str(e))
         results.status = RecipeStatus.FAILED
         raise
 
-    opensearch_records_len = aggregator.get_total_opensearch_records_num(opensearch_records)
+    opensearch_records_len = get_total_opensearch_records_num(opensearch_records)
 
+    # analyse max user id
     max_userid, max_userid_count, user_id_count = analyse_max_user_id(opensearch_records)
 
     user_id_tracking_id_list = []
-    for _, record_list in opensearch_records.items():
-        for record in record_list:
-            if record["fields"]["USER_ID"] == max_userid:
-                tracking_id = record["fields"]["WEBEX_TRACKINGID"]
-                if tracking_id not in user_id_tracking_id_list:
-                    user_id_tracking_id_list.append(tracking_id)
+    # find the corresponding tracking id for the max user id
+    for record in opensearch_records:
+        if record["fields"]["USER_ID"] == max_userid:
+            tracking_id = record["fields"][opensearch_filter_key_name]
+            if tracking_id not in user_id_tracking_id_list:
+                user_id_tracking_id_list.append(tracking_id)
 
     user_id_filter_link = aggregator.generate_opensearch_filter_link_is_one_of(
-        opensearch_link, "fields.WEBEX_TRACKINGID", user_id_tracking_id_list, start_time=start_time
+        opensearch_link,
+        f"fields.{opensearch_filter_key_name}",
+        user_id_tracking_id_list,
+        start_time=query_start_time,
     )
 
     (
@@ -307,10 +331,11 @@ def handler(incident: Incident, recipe: Recipe):
                 re.search(r"/calliope/api/v2/venues/.+?/confluences", item["uri"])
                 and item["method"] == "POST"
             ):
-                example_influxdb = item
+                example_influxdb_record = item
                 break
     else:
         # find an example that has max metric value
+        # priority: region > uri > USER_ID
         max_dict = {
             "environment": max_region_count,
             "uri": max_uri_count,
@@ -320,26 +345,28 @@ def handler(incident: Incident, recipe: Recipe):
         if max_metric == "environment":
             for item in influxdb_records:
                 if item["environment"] == max_region_name:
-                    example_influxdb = item
+                    example_influxdb_record = item
                     break
         elif max_metric == "uri":
             for item in influxdb_records:
                 if item["uri"] == max_uri:
-                    example_influxdb = item
+                    example_influxdb_record = item
                     break
         elif max_metric == "USER_ID":
-            for _, record_list in opensearch_records.items():
-                for record in record_list:
-                    if record["fields"]["USER_ID"] == max_userid:
-                        example_opensearch = record
-                        break
-        else:
-            for _, record_list in opensearch_records.items():
-                example_opensearch = record_list[0]
-                break
+            for record in opensearch_records:
+                if record["fields"]["USER_ID"] == max_userid:
+                    example_opensearch = record
+                    break
 
-    if example_influxdb is not None:
-        example_opensearch = opensearch_records[example_influxdb[influxdb_trackingid_name]][0]
+    # example error is found in InfluxDB records, then find the corresponding OpenSearch record
+    if example_influxdb_record is not None:
+        for record in opensearch_records:
+            if (
+                record["fields"][opensearch_filter_key_name]
+                == example_influxdb_record[influxdb_tracking_key_name]
+            ):
+                example_opensearch = record
+                break
 
     results.log(f"From {first_error_time} To {last_error_time}, there are:")
     for error_code, count in error_code_count.items():
@@ -418,9 +445,9 @@ def handler(incident: Incident, recipe: Recipe):
         # filter all logs that contain com.cisco.wx2
         filtered_logs = [entry for entry in stack_trace if "com.cisco.wx2" in entry]
         if len(filtered_logs) > 0:
-            results.log(f"logs: {filtered_logs[0]}")
+            results.log(f"stack_trace: {filtered_logs[0]}")
         elif len(stack_trace) > 0:
-            results.log(f"logs: {stack_trace[0]}")
+            results.log(f"stack_trace: {stack_trace[0]}")
 
     logger.info("analysis:", results.analysis)
     results.status = RecipeStatus.SUCCESSFUL

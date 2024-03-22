@@ -176,8 +176,8 @@ class DataAggregator(HTTPService):
         """Get alert rule from a URL."""
         return url.split("/")[-2]
 
-    def _get_grafana_id_data(self, data: dict):
-        """Get the Grafana dashboard, alert panel and alert rule id from the alert."""
+    def _get_grafana_config_ids(self, data: dict):
+        """Get the Grafana dashboard, alert panel and alert rule ids from the alert."""
         alert = data.get("alert")
         dashboard_id = self._get_grafana_dashboard_from_url(alert["dashboardURL"])
         panel_id = self._get_grafana_panel_from_url(alert["panelURL"])
@@ -185,17 +185,18 @@ class DataAggregator(HTTPService):
 
         return dashboard_id, panel_id, alert_rule_id
 
-    def get_grafana_info_from_incident(self, incident: Incident, prefetch=False):
+    def get_grafana_info_from_incident(self, incident: Incident, force_latest=False):
         """
-        Get all detailed Grafana info including alert rule, data source info, dashboard, panel etc.
+        Get alert rule, InfluxDB and OpenSearch config on grafana.
 
         Parameters:
         incident (Incident): The incident object.
+        force_latest (bool): Whether to fetch the latest data.
 
         Returns:
         dict: The response of garfana query API.
         """
-        dashboard_id, panel_id, alert_rule_id = self._get_grafana_id_data(incident.data)
+        dashboard_id, panel_id, alert_rule_id = self._get_grafana_config_ids(incident.data)
         url = self.get_source_url("grafana")
         body = {
             "uuid": incident.uuid,
@@ -203,12 +204,12 @@ class DataAggregator(HTTPService):
                 "dashboard_id": dashboard_id,
                 "panel_id": panel_id,
                 "alert_rule_id": alert_rule_id,
+                "force_latest": force_latest,
             },
-            "prefetch": prefetch,
         }
         return self.post(url, body=body)
 
-    def get_firing_time(self, incident):
+    def get_firing_time_from_incident(self, incident: Incident):
         """Get alert firing time.
 
         Parameters:
@@ -261,8 +262,7 @@ class DataAggregator(HTTPService):
         Returns:
         str: The InfluxDB bucket name.
         """
-        dataSourceInfo = grafana_result["dataSourceInfo"]
-        return dataSourceInfo["jsonData"]["dbName"]
+        return grafana_result["influxdb"]["dbName"]
 
     def get_influxdb_measurement_from_grafana(self, grafana_result):
         """
@@ -372,7 +372,7 @@ class DataAggregator(HTTPService):
                 result.append({"key": key, "value": value, "operator": operator})
         return result
 
-    def get_influxdb_records(self, incident: Incident, influxdb_query):
+    def get_influxdb_records(self, incident: Incident, influxdb_query, force_latest=False):
         """
         Get InfluxDB records.
 
@@ -383,81 +383,60 @@ class DataAggregator(HTTPService):
             "bucket": str,
             "measurement": str,
             "tagSets": list of dict
-            [{
+            [
+                {
                 tagkeyName:tagvalue
-            }],
+                }
+            ],
             "start_time": str,
             "end_time": str
         }
+        force_latest (bool): Whether to fetch the latest data.
 
         Returns:
         dict: The response of InfluxDB query API.
         """
         url = self.get_source_url("influxdb")
+        if influxdb_query.get("force_latest") is None:
+            influxdb_query["force_latest"] = force_latest
         body = {"uuid": incident.uuid, "params": influxdb_query}
         return self.post(url, body=body)
 
-    def get_opensearch_dashboard_link_from_grafana(self, grafana_result):
-        """
-        Get OpenSearch dashboard link.
+    def get_grafana_opensearch_config_list(self, grafana_result):
+        return grafana_result["opensearch"]
 
-        Parameters:
-        grafana_result (dict): response from "get_grafana_info_from_incident" method.
-
-        Returns:
-        str: The OpenSearch dashboard link.
-        """
-        links = grafana_result["detailPanel"]["fieldConfig"]["defaults"]["links"]
-        urls = [item["url"] for item in links]
-        for url in urls:
-            if "indexPattern" in url:
-                return url
-        return ""
-
-    def get_opensearch_index_pattern(self, opensearch_dashboard_link):
-        """
-        Get index pattern from OpenSearch link.
-
-        Parameters:
-        opensearch_dashboard_link (str): The OpenSearch link.
-
-        Returns:
-        str: The index pattern.
-        """
-        startStr = "indexPattern:'"
-        start_index = opensearch_dashboard_link.find(startStr) + len(startStr)
-        end_index = opensearch_dashboard_link.find("'", start_index)
-        index_pattern_url = opensearch_dashboard_link[start_index:end_index]
-        return index_pattern_url
-
-    def get_opensearch_records(self, incident: Incident, opensearch_query):
+    def get_opensearch_records(self, incident: Incident, opensearch_query, force_latest=False):
         """
         Get OpenSearch records.
 
         Parameters:
-        incident (Incident): The incident object.,
+        incident (Incident): The incident object.
+        force_latest (bool): Whether to fetch the latest data.
 
         Returns:
         dict: The response of OpenSearch query API.
         """
         url = self.get_source_url("opensearch")
+        if opensearch_query.get("force_latest") is None:
+            opensearch_query["force_latest"] = force_latest
         body = {"uuid": incident.uuid, "params": opensearch_query}
         return self.post(url, body=body)
 
-    def get_total_opensearch_records_num(self, opensearch_records):
+    def get_opensearch_index_pattern_from_link(self, opensearch_dashboard_link):
         """
-        Get total number of OpenSearch records.
+        Get index pattern from OpenSearch link.
 
         Parameters:
-        opensearch_records (dict): The response of OpenSearch query API.
+        opensearch_dashboard_link (str): The OpenSearch dashboard link.
 
         Returns:
-        int: The total number of OpenSearch records.
+        str: The index pattern.
         """
-        num = 0
-        for _, record_list in opensearch_records.items():
-            num += len(record_list)
-        return num
+        start_str = "indexPattern:'"
+        start_index = opensearch_dashboard_link.find(start_str) + len(start_str)
+        end_index = opensearch_dashboard_link.find("'", start_index)
+        index_pattern_url = opensearch_dashboard_link[start_index:end_index]
+        return index_pattern_url
 
     def generate_opensearch_filter_link_is_one_of(
         self, opensearch_dashboard_link, filter_key, filter_data_list, start_time="", end_time=""
@@ -466,6 +445,8 @@ class DataAggregator(HTTPService):
         Generate OpenSearch dashboard filter link
 
         Filter OpenSearch records that the values of filter_key is one of the values in filter_data_list.
+
+        e.g. filter_key is "WEBEX_TRACKINGID", filter_data_list is ["123456", "234567"], the link can filter all records that the value of "WEBEX_TRACKINGID" is "123456" or "234567".
 
         For item in filter_data_list, if it starts with an digit, it should be wrapped with single quote in the 'params' and 'should' varibales.
 
@@ -487,7 +468,7 @@ class DataAggregator(HTTPService):
             opensearch_dashboard_link = re.sub(
                 r"to:[^,)]+", f"to:{end_time}", opensearch_dashboard_link
             )
-        index_pattern = self.get_opensearch_index_pattern(opensearch_dashboard_link)
+        index_pattern = self.get_opensearch_index_pattern_from_link(opensearch_dashboard_link)
         template_index = "(match_phrase:({filter_key}:{filter_data}))"
         template_index_with_digit = "(match_phrase:({filter_key}:'{filter_data}'))"
         formatted_items = []
@@ -502,6 +483,7 @@ class DataAggregator(HTTPService):
                 formatted_items.append(
                     template_index.format(filter_key=filter_key, filter_data=filter_data)
                 )
+        # fixed pattern of OpenSearch dashboard link string generation
         params = ",".join([f"'{s}'" if s[0].isdigit() else s for s in filter_data_list])
         value = ",%20".join(filter_data_list)
         should = ",".join(formatted_items)
