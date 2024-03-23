@@ -104,7 +104,7 @@ func postStatusToWebexBot(message []JobStatus, webexBotAddress string) error {
 	}
 
 	// Send the POST request
-	url := fmt.Sprintf("%s/api/analysis", webexBotAddress)
+	url := fmt.Sprintf("%s/api/status", webexBotAddress)
 	resp, err := httpc.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
