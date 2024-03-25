@@ -131,6 +131,76 @@ func createConfigMap(
 	return cm, nil
 }
 
+// Build environment variables for a recipe.
+func buildEnvVarsForRecipe(recipeName string) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+
+	switch recipeName {
+	case "jira":
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "JIRA_URL",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "jira-url",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "JIRA_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "jira-user",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "JIRA_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "jira-token",
+					},
+				},
+			},
+		)
+	case "space":
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "WEBEX_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "webex-token",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "BOT_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "bot-token",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "BOT_EMAIL",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "euphrosyne-keys"},
+						Key:                  "bot-email",
+					},
+				},
+			},
+		)
+	}
+
+	return envVars
+}
+
 // Create a Kubernetes Job to execute a recipe.
 func createJob(
 	recipeName string, recipe Recipe, uuid string, cmName string, config *Config,
@@ -188,74 +258,7 @@ func createJob(
 								"-c",
 								buildRecipeCommand(recipe.Config, config),
 							},
-							Env: []corev1.EnvVar{
-								{
-									Name: "JIRA_URL",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "jira-url",
-										},
-									},
-								},
-								{
-									Name: "JIRA_USER",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "jira-user",
-										},
-									},
-								},
-								{
-									Name: "JIRA_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "jira-token",
-										},
-									},
-								},
-								{
-									Name: "WEBEX_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "webex-token",
-										},
-									},
-								},
-								{
-									Name: "BOT_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "bot-token",
-										},
-									},
-								},
-								{
-									Name: "BOT_EMAIL",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "euphrosyne-keys",
-											},
-											Key: "bot-email",
-										},
-									},
-								},
-							},
+							Env: buildEnvVarsForRecipe(recipeName),
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
