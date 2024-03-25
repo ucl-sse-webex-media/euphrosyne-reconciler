@@ -15,11 +15,11 @@ def handler(incident: Incident, recipe: Recipe):
     results = recipe.results
     try:
         roomId = space.create_space(incident.data)
-        results.log(f"Space created successfully: {roomId}\n")
+        results.log(f"Space created successfully\n")
         response = space.add_user(incident.data, roomId)
         results.log(response)
-        response = space.post_analysis(incident.data, roomId)
-        results.log(f"Analysis posted successfully {response}\n")
+        space.post_analysis(incident.data, roomId)
+        results.log(f"Analysis posted successfully\n")
         results.status = RecipeStatus.SUCCESSFUL
     except (SpaceHTTPError, SpaceParsingError) as e:
         results.log(f"Failed to create space: {e}")
