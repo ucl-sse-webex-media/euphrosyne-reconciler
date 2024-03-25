@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: refresh-token-cronjob
+spec:
+  schedule: "0 8 * * 1"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: refresh-token
+            image: wakawakaliulala/refresh-token:latest
+            imagePullPolicy: IfNotPresent
+          restartPolicy: OnFailure

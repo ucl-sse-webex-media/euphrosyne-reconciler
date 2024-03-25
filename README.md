@@ -87,14 +87,23 @@ kubectl apply -f recipes/kubernetes/orpheus-operator-recipes.yaml
 
 In order for the Euphrosyne Reconciler to be able to interact with external services, we load the
 corresponding credentials from Kubernetes secrets. Please run the following command, providing your
-own credentials for accessing Jira. If no namespace is specified this will be created in the
-configured default namespace:
+own credentials for accessing Jira and Webex. For accessing Webex API, one integration is need to
+be created, where there are client ID and client secrets. The access token and refresh token can be
+acquired by following this [tutorial](https://developer.webex.com/blog/generating-an-oauth-token-pair-using-a-webex-integration).
+
+If no namespace is specified this will be created in the configured default namespace:
 
 ```bash
 kubectl create secret generic euphrosyne-keys \
   --from-literal=jira-url=<your Jira server URL> \
   --from-literal=jira-user=<your Jira username> \
-  --from-literal=jira-token=<your Jira token>
+  --from-literal=jira-token=<your Jira token> \
+  --from-literal=webex-token=<your Webex token> \
+  --from-literal=bot-token=<your Webex bot token> \
+  --from-literal=bot-email=<your Webex bot email> \
+  --from-literal=client-id= <your client ID of Webex Integration> \
+  --from-literal=client-secret=<your client secret of Webex Integration> \
+  --from-literal=refresh-token=<your refresh token> \
 ```
 
 ### Configuring a different namespace for executing recipes
