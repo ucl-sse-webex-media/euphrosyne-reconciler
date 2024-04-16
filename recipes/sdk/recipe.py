@@ -85,9 +85,9 @@ class RecipeResults:
     def analysis(self, value: str):
         self.results["analysis"] = value
 
-    def log(self, message):
+    def log(self, *args, sep: str = " ", end: str = "\n"):
         """Add a log to the recipe analysis."""
-        self.analysis = f"{self.analysis} {message}" if self.analysis else message
+        self.analysis = self.analysis + sep.join(map(str, args)) + end
 
     @classmethod
     def from_dict(cls, d):

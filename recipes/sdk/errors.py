@@ -43,3 +43,9 @@ class IncidentParsingError(ValueError):
     """Error when parsing an incident."""
 
     pass
+
+
+class ApiResError(ValueError):
+    """Error in the api response"""
+
+    pass
